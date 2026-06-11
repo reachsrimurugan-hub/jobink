@@ -323,7 +323,8 @@ export const applicationService = {
           jobLocation: job.location || '',
           jobPayment: job.payment || '',
           jobPaymentType: job.paymentType || '',
-          jobStatus: job.status || 'open'
+          jobStatus: job.status || 'open',
+          employerId: job.employerId || ''
         };
       })
     );

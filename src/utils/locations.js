@@ -1,29 +1,28 @@
 export const LOCATIONS = {
-  "Mumbai": [
-    "Andheri",
-    "Bandra",
-    "Dadar",
-    "Borivali",
-    "Chembur",
-    "Thane",
-    "Vashi"
+  "Coimbatore": [
+    "Vadavalli",
+    "Kovai Pudur",
+    "RS Puram",
+    "New Bus Stand",
+    "Central Bus Stand",
+    "Ganapathy",
+    "Vaidehi Nagar"
   ],
-  "Bangalore": [
-    "Indiranagar",
-    "Koramangala",
-    "Whitefield",
-    "Jayanagar",
-    "HSR Layout",
-    "Malleshwaram"
+  "Madurai": [
+    "Tallakulam",
+    "Anna Nagar",
+    "KK Nagar",
+    "Kovilpatti",
+    "Natham",
+    "Sivagangai",
+    "Virudhunagar"
   ],
-  "Delhi": [
-    "Dwarka",
-    "Karol Bagh",
-    "Connaught Place",
-    "Rohini",
-    "Saket",
-    "Noida",
-    "Gurugram"
+  "Salem": [
+    "Railway Station",
+    "Fort",
+    "New Bus Stand",
+    "Steel Plant",
+    "Yercaud"
   ]
 };
 

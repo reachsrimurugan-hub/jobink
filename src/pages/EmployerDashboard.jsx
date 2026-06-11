@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { jobService, applicationService, notificationService, reviewService } from '../services/db';
 import Navbar from '../components/Navbar';
@@ -8,16 +8,32 @@ import JobCard from '../components/JobCard';
 import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
+import ProfileViewModal from '../components/ProfileViewModal';
 import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 const EmployerDashboard = () => {
   const { currentUser, reloadProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState('home');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
   const [myJobs, setMyJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Profile Viewer State
+  const [selectedWorkerId, setSelectedWorkerId] = useState(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [canReviewWorker, setCanReviewWorker] = useState(false);
+
+  const handleViewWorkerProfile = (workerId) => {
+    setSelectedWorkerId(workerId);
+    const workedWithWorker = myJobs.some(
+      job => job.status === 'completed' && job.selectedWorkers?.includes(workerId)
+    );
+    setCanReviewWorker(workedWithWorker);
+    setIsProfileOpen(true);
+  };
 
   // Applicant Modal State
   const [isApplicantsOpen, setIsApplicantsOpen] = useState(false);
@@ -373,8 +389,8 @@ const EmployerDashboard = () => {
               {/* User Bio Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                 <img 
-                  src={currentUser.profilePhotoUrl} 
-                  alt={currentUser.name} 
+                  src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
+                  alt={currentUser.name || 'Employer'} 
                   className="w-20 h-20 rounded-full object-cover border border-slate-200"
                 />
                 <div className="flex-1 text-center sm:text-left">
@@ -459,7 +475,13 @@ const EmployerDashboard = () => {
                 {/* Details */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h4 className="font-bold text-slate-800 text-sm">{app.workerName}</h4>
+                    <button
+                      type="button"
+                      onClick={() => handleViewWorkerProfile(app.workerId)}
+                      className="font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer text-left text-sm focus:outline-none block"
+                    >
+                      {app.workerName}
+                    </button>
                     <div className="flex items-center gap-1.5 mt-1">
                       <RatingStars rating={app.workerRating} size={11} />
                       <span className="text-[10px] text-slate-400">Worker</span>
@@ -595,6 +617,15 @@ const EmployerDashboard = () => {
           </button>
         </form>
       </Modal>
+
+      <ProfileViewModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        targetUserId={selectedWorkerId}
+        currentUserId={currentUser.uid}
+        currentUserName={currentUser.name}
+        canWriteReview={canReviewWorker}
+      />
     </div>
   );
 };

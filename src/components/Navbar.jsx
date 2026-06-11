@@ -1,11 +1,24 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, ShieldAlert, BadgeCheck } from 'lucide-react';
+import { notificationService } from '../services/db';
 
 const Navbar = ({ activeTab, setActiveTab }) => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.role === 'admin') return;
+    const unsubscribe = notificationService.getUserNotifications(currentUser.uid, (data) => {
+      const count = data.filter(n => !n.read).length;
+      setUnreadCount(count);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
@@ -16,6 +29,26 @@ const Navbar = ({ activeTab, setActiveTab }) => {
     }
   };
 
+  const tabs = currentUser?.role === 'worker' ? [
+    { id: 'home', label: 'Feed' },
+    { id: 'applications', label: 'Applied' },
+    { id: 'notifications', label: 'Alerts' },
+    { id: 'profile', label: 'Profile' }
+  ] : currentUser?.role === 'employer' ? [
+    { id: 'home', label: 'Overview' },
+    { id: 'jobs', label: 'My Posts' },
+    { id: 'notifications', label: 'Alerts' },
+    { id: 'profile', label: 'Profile' }
+  ] : [];
+
+  const handleTabClick = (tabId) => {
+    if (setActiveTab) {
+      setActiveTab(tabId);
+    } else {
+      navigate('/dashboard', { state: { defaultTab: tabId } });
+    }
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -23,7 +56,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
         <Link 
           to="/dashboard" 
           className="flex items-center gap-1.5 focus:outline-none"
-          onClick={() => setActiveTab && setActiveTab('home')}
+          onClick={() => handleTabClick('home')}
         >
           <span className="font-bold text-xl tracking-tight text-primary flex items-center">
             WorkLink
@@ -34,6 +67,36 @@ const Navbar = ({ activeTab, setActiveTab }) => {
             </span>
           )}
         </Link>
+
+        {/* Desktop Navigation links */}
+        {currentUser?.role && currentUser.role !== 'admin' && (
+          <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 border border-slate-200/50 p-1 rounded-xl">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const hasBadge = tab.id === 'notifications' && unreadCount > 0;
+              
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabClick(tab.id)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all relative flex items-center gap-1.5 ${
+                    isActive 
+                      ? 'bg-white text-primary shadow-sm border border-slate-200/40' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  {hasBadge && (
+                    <span className="bg-red-500 text-white font-extrabold text-[9px] rounded-full w-4 h-4 flex items-center justify-center border border-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         {/* User Stats & Quick Actions */}
         <div className="flex items-center gap-2">

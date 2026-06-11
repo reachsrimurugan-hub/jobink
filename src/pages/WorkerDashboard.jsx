@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { jobService, applicationService, notificationService, reviewService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
@@ -7,16 +8,32 @@ import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
 import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
-import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock } from 'lucide-react';
+import ProfileViewModal from '../components/ProfileViewModal';
+import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star } from 'lucide-react';
 
 const WorkerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState('home');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
   const [jobs, setJobs] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Profile Viewer State
+  const [selectedEmployerId, setSelectedEmployerId] = useState(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [canReviewEmployer, setCanReviewEmployer] = useState(false);
+
+  const handleViewEmployerProfile = (employerId) => {
+    setSelectedEmployerId(employerId);
+    const workedWithEmployer = myApplications.some(
+      app => app.employerId === employerId && app.status === 'selected' && app.jobStatus === 'completed'
+    );
+    setCanReviewEmployer(workedWithEmployer);
+    setIsProfileModalOpen(true);
+  };
   
   // Filtering States (Default to worker's registered location)
   const [filterCity, setFilterCity] = useState(currentUser?.city || '');
@@ -256,6 +273,7 @@ const WorkerDashboard = () => {
                           applicationStatus={appStatus}
                           isUserVerified={currentUser.verified}
                           onApply={handleApplyJob}
+                          onViewEmployerProfile={handleViewEmployerProfile}
                         />
                       );
                     })}
@@ -306,8 +324,8 @@ const WorkerDashboard = () => {
                         <div className="flex items-center gap-1.5"><Clock size={14} className="text-slate-400" /> Applied: {new Date(app.appliedAt).toLocaleDateString('en-IN')}</div>
                       </div>
 
-                      {/* Selected actions */}
-                      {app.status === 'selected' && (
+                      {/* Selected actions (Active Jobs) */}
+                      {app.status === 'selected' && app.jobStatus !== 'completed' && (
                         <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
                           <span className="text-[11px] font-bold text-green-600 block">✓ You have been selected! Contact the employer:</span>
                           <div className="flex gap-2">
@@ -326,6 +344,21 @@ const WorkerDashboard = () => {
                               WhatsApp
                             </a>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Selected actions (Completed Jobs) */}
+                      {app.status === 'selected' && app.jobStatus === 'completed' && (
+                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                          <span className="text-[11px] font-bold text-slate-500 block">✓ Work Completed! Feedback is active:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleViewEmployerProfile(app.employerId)}
+                            className="w-full text-center bg-primary/10 hover:bg-primary/20 text-primary font-bold py-2 rounded-lg text-xs transition-colors touch-target flex items-center justify-center gap-1.5"
+                          >
+                            <Star size={14} className="fill-primary" />
+                            Rate & Review Employer
+                          </button>
                         </div>
                       )}
                     </div>
@@ -378,8 +411,8 @@ const WorkerDashboard = () => {
               {/* User Bio Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                 <img 
-                  src={currentUser.profilePhotoUrl} 
-                  alt={currentUser.name} 
+                  src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
+                  alt={currentUser.name || 'Worker'} 
                   className="w-20 h-20 rounded-full object-cover border border-slate-200"
                 />
                 <div className="flex-1 text-center sm:text-left">
@@ -440,6 +473,15 @@ const WorkerDashboard = () => {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         unreadCount={unreadCount} 
+      />
+
+      <ProfileViewModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        targetUserId={selectedEmployerId}
+        currentUserId={currentUser.uid}
+        currentUserName={currentUser.name}
+        canWriteReview={canReviewEmployer}
       />
     </div>
   );

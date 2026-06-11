@@ -10,7 +10,8 @@ const JobCard = ({
   onApply, 
   onViewApplicants, 
   onMarkCompleted,
-  onDelete
+  onDelete,
+  onViewEmployerProfile
 }) => {
   const { 
     title, 
@@ -87,7 +88,14 @@ const JobCard = ({
         {/* Employer details for worker */}
         {userRole === 'worker' && job.employerName && (
           <div className="text-[11px] text-slate-500 mb-2.5 font-medium flex items-center gap-1">
-            <span>Posted by: {job.employerName}</span>
+            <span>Posted by:</span>
+            <button
+              type="button"
+              onClick={() => onViewEmployerProfile && onViewEmployerProfile(job.employerId)}
+              className="font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer text-left focus:outline-none"
+            >
+              {job.employerName}
+            </button>
           </div>
         )}
 
