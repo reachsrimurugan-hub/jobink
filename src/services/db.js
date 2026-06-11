@@ -514,47 +514,6 @@ export const applicationService = {
       }
     }
     return true;
-  },
-
-  // Update work status (started, finished, completed)
-  updateWorkStatus: async (jobId, workerId, workStatus) => {
-    const appId = `${jobId}_${workerId}`;
-    await updateDoc(doc(db, 'applications', appId), { workStatus });
-    
-    // Fetch job details to get employerId / worker details for notification
-    const appSnap = await getDoc(doc(db, 'applications', appId));
-    if (appSnap.exists()) {
-      const app = appSnap.data();
-      const jobDoc = await getDoc(doc(db, 'jobs', jobId));
-      const job = jobDoc.exists() ? jobDoc.data() : {};
-      
-      if (workStatus === 'started') {
-        // Notify employer
-        await notificationService.addNotification(
-          job.employerId,
-          "Work Started",
-          `Worker ${app.workerName} has started work for your job requirement: "${job.title}".`
-        );
-      } else if (workStatus === 'finished') {
-        // Notify employer
-        await notificationService.addNotification(
-          job.employerId,
-          "Work Finished",
-          `Worker ${app.workerName} has marked the job "${job.title}" as finished. Please verify manually.`
-        );
-      } else if (workStatus === 'completed') {
-        // Also update job status to completed
-        await updateDoc(doc(db, 'jobs', jobId), { status: 'completed' });
-        
-        // Notify worker
-        await notificationService.addNotification(
-          workerId,
-          "Work Completed & Approved",
-          `The employer has verified and approved your work for "${job.title}". Payment will be processed.`
-        );
-      }
-    }
-    return true;
   }
 };
 

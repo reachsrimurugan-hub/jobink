@@ -332,19 +332,6 @@ const WorkerDashboard = () => {
     }
   };
 
-  // Update worker status for a job (start / finish)
-  const handleUpdateWorkStatus = async (jobId, workerId, status) => {
-    try {
-      setLoading(true);
-      await applicationService.updateWorkStatus(jobId, workerId, status);
-      await loadApplications();
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
-  };
-
   const filteredAndSortedJobs = useMemo(() => {
     let result = [...jobs];
 
@@ -745,7 +732,7 @@ const WorkerDashboard = () => {
 
                       {/* Selected actions (Active Jobs) */}
                       {app.status === 'selected' && app.jobStatus !== 'completed' && (
-                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2.5">
+                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
                           <span className="text-[11px] font-bold text-green-600 block">✓ {t('youHaveBeenSelected')}</span>
                           <div className="flex gap-2">
                             <a 
@@ -762,56 +749,6 @@ const WorkerDashboard = () => {
                             >
                               {t('whatsapp')}
                             </a>
-                          </div>
-
-                          {/* Work Status Buttons for Worker */}
-                          <div className="border-t border-slate-100 pt-2.5 mt-1 flex flex-col gap-2">
-                            <div className="flex justify-between items-center text-xs font-semibold">
-                              <span className="text-slate-500">Work Status:</span>
-                              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                                app.workStatus === 'started' 
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                                  : app.workStatus === 'finished'
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                    : app.workStatus === 'completed'
-                                      ? 'bg-green-50 text-green-700 border border-green-200'
-                                      : 'bg-slate-50 text-slate-500 border border-slate-200'
-                              }`}>
-                                {app.workStatus === 'started' 
-                                  ? 'Work Started' 
-                                  : app.workStatus === 'finished'
-                                    ? 'Finished - Awaiting Approval'
-                                    : app.workStatus === 'completed'
-                                      ? 'Completed & Approved'
-                                      : 'Not Started'}
-                              </span>
-                            </div>
-
-                            {(!app.workStatus || app.workStatus === 'booked') && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateWorkStatus(app.jobId, app.workerId, 'started')}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
-                              >
-                                Start Work
-                              </button>
-                            )}
-
-                            {app.workStatus === 'started' && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateWorkStatus(app.jobId, app.workerId, 'finished')}
-                                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
-                              >
-                                Finish Work
-                              </button>
-                            )}
-
-                            {app.workStatus === 'finished' && (
-                              <p className="text-[10px] text-slate-400 font-semibold italic text-center">
-                                Awaiting employer manually verifying work status...
-                              </p>
-                            )}
                           </div>
                         </div>
                       )}

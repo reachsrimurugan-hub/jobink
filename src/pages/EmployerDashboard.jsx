@@ -358,32 +358,6 @@ const EmployerDashboard = () => {
     }
   };
 
-  const handleVerifyWorkCompleted = async (jobId, workerId, workerName) => {
-    try {
-      setApplicantsLoading(true);
-      // 1. Update workStatus to completed
-      await applicationService.updateWorkStatus(jobId, workerId, 'completed');
-      
-      // 2. Refresh applicants list and job overview
-      const data = await applicationService.getJobApplications(jobId);
-      setApplicants(data);
-      await loadEmployerData();
-      setApplicantsLoading(false);
-      
-      // 3. Close applicants modal and trigger rating modal
-      setIsApplicantsOpen(false);
-      setReviewJobId(jobId);
-      setReviewWorkerId(workerId);
-      setReviewWorkerName(workerName || t('worker'));
-      setWorkerRating(5);
-      setWorkerComment('');
-      setIsReviewOpen(true);
-    } catch (err) {
-      console.error(err);
-      setApplicantsLoading(false);
-    }
-  };
-
   // Job marked completed
   const handleMarkJobCompleted = async (jobId) => {
     try {
@@ -1090,40 +1064,7 @@ const EmployerDashboard = () => {
                       </button>
                     </>
                   ) : app.status === 'selected' ? (
-                    <div className="flex flex-col gap-2.5 w-full">
-                      {/* Hired Worker Work Status */}
-                      <div className="bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold">
-                        <span className="text-slate-500">Work Status:</span>
-                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                          app.workStatus === 'started' 
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                            : app.workStatus === 'finished'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : app.workStatus === 'completed'
-                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                : 'bg-slate-50 text-slate-500 border border-slate-200'
-                        }`}>
-                          {app.workStatus === 'started' 
-                            ? 'Work Started' 
-                            : app.workStatus === 'finished'
-                              ? 'Finished - Verify Needed'
-                              : app.workStatus === 'completed'
-                                ? 'Completed & Approved'
-                                : 'Not Started'}
-                        </span>
-                      </div>
-
-                      {/* Verify & Complete Work Button */}
-                      {app.workStatus === 'finished' && (
-                        <button
-                          type="button"
-                          onClick={() => handleVerifyWorkCompleted(selectedJobId, app.workerId, app.workerName)}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
-                        >
-                          Verify & Mark Completed
-                        </button>
-                      )}
-
+                    <div className="flex flex-col gap-2 w-full">
                       <div className="flex gap-2 w-full">
                         <a 
                           href={`tel:${app.workerPhone}`}
