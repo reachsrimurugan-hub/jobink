@@ -6,10 +6,16 @@ import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
 import { ArrowLeft, CheckCircle, ShieldAlert, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useMetadata } from '../hooks/useMetadata';
 
 const PostJobPage = () => {
   const { currentUser } = useAuth();
   const { t } = useTranslation();
+
+  useMetadata(
+    "Post a Job - WorkLink",
+    "Post your part-time helper requirement on WorkLink. Specify manual task details, working hours, neighborhood location, and direct payment amount."
+  );
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [payment, setPayment] = useState('');

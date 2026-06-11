@@ -287,5 +287,13 @@
   "unreadAlerts": "Unread alerts",
   "recentActivity": "Recent Activity",
   "viewAll": "View All",
-  "youHaveActiveRequirements": "You have {{count}} active requirements"
+  "youHaveActiveRequirements": "You have {{count}} active requirements",
+  "searchJobs": "Search jobs...",
+  "paymentType": "Payment Type",
+  "minPayment": "Min Payment (₹)",
+  "sortBy": "Sort By",
+  "newest": "Newest First",
+  "paymentDesc": "Payment: High to Low",
+  "paymentAsc": "Payment: Low to High",
+  "all": "All"
 }

@@ -3,10 +3,11 @@ export const LOCATIONS = {
     "Vadavalli",
     "Kovai Pudur",
     "RS Puram",
-    "New Bus Stand",
-    "Central Bus Stand",
     "Ganapathy",
-    "Vaidehi Nagar"
+    "Ukkadam",
+    "Kuniyamuthur",
+    "Singanallur",
+    "Gandhipuram"
   ],
   "Madurai": [
     "Tallakulam",

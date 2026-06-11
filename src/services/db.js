@@ -448,6 +448,8 @@ export const applicationService = {
           jobPaymentType: job.paymentType || '',
           jobStatus: job.status || 'open',
           employerId: job.employerId || '',
+          employerName: job.employerName || '',
+          employerPhone: job.employerPhone || '',
           paymentStatus: job.paymentStatus || 'pending'
         };
       })
@@ -508,6 +510,47 @@ export const applicationService = {
           workerId,
           "Application Status Update",
           `Your application for "${job.title}" was not selected.`
+        );
+      }
+    }
+    return true;
+  },
+
+  // Update work status (started, finished, completed)
+  updateWorkStatus: async (jobId, workerId, workStatus) => {
+    const appId = `${jobId}_${workerId}`;
+    await updateDoc(doc(db, 'applications', appId), { workStatus });
+    
+    // Fetch job details to get employerId / worker details for notification
+    const appSnap = await getDoc(doc(db, 'applications', appId));
+    if (appSnap.exists()) {
+      const app = appSnap.data();
+      const jobDoc = await getDoc(doc(db, 'jobs', jobId));
+      const job = jobDoc.exists() ? jobDoc.data() : {};
+      
+      if (workStatus === 'started') {
+        // Notify employer
+        await notificationService.addNotification(
+          job.employerId,
+          "Work Started",
+          `Worker ${app.workerName} has started work for your job requirement: "${job.title}".`
+        );
+      } else if (workStatus === 'finished') {
+        // Notify employer
+        await notificationService.addNotification(
+          job.employerId,
+          "Work Finished",
+          `Worker ${app.workerName} has marked the job "${job.title}" as finished. Please verify manually.`
+        );
+      } else if (workStatus === 'completed') {
+        // Also update job status to completed
+        await updateDoc(doc(db, 'jobs', jobId), { status: 'completed' });
+        
+        // Notify worker
+        await notificationService.addNotification(
+          workerId,
+          "Work Completed & Approved",
+          `The employer has verified and approved your work for "${job.title}". Payment will be processed.`
         );
       }
     }
@@ -601,12 +644,95 @@ export const reviewService = {
     return true;
   },
 
-  // Fetch reviews received by a user
+    // Fetch reviews received by a user
   getUserReviews: async (userId) => {
     const q = query(
       collection(db, 'reviews'),
       where('receiverId', '==', userId)
     );
+    const querySnapshot = await getDocs(q);
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+};
+
+// --- REPORT SERVICE ---
+export const reportService = {
+  submitReport: async (reporterId, reporterName, reportedId, reportedName, reason, details) => {
+    const payload = {
+      reporterId,
+      reporterName,
+      reportedId,
+      reportedName,
+      reason,
+      details,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    
+    // Add report doc to Firestore
+    await addDoc(collection(db, 'reports'), payload);
+    
+    // Alert the reported user
+    await notificationService.addNotification(
+      reportedId,
+      "Account Reported Alert",
+      `Your account has been reported for: "${reason}". Details: "${details}". Admin will review this activity.`
+    );
+    return true;
+  },
+
+  getPendingReports: async () => {
+    const q = query(
+      collection(db, 'reports'),
+      where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  resolveReport: async (reportId) => {
+    const reportRef = doc(db, 'reports', reportId);
+    await updateDoc(reportRef, { status: 'resolved' });
+    return true;
+  },
+
+  removeUser: async (uid) => {
+    // 1. Delete user profile
+    await deleteDoc(doc(db, 'users', uid));
+    
+    // 2. Mark any pending reports for this user as resolved
+    const q = query(
+      collection(db, 'reports'),
+      where('reportedId', '==', uid),
+      where('status', '==', 'pending')
+    );
+    const snap = await getDocs(q);
+    const promises = snap.docs.map(d => updateDoc(doc(db, 'reports', d.id), { status: 'resolved' }));
+    await Promise.all(promises);
+    return true;
+  }
+};
+
+// --- QUERY SERVICE ---
+export const queryService = {
+  submitQuery: async (userId, userName, userPhone, userRole, queryText) => {
+    const payload = {
+      userId,
+      userName,
+      userPhone,
+      userRole,
+      queryText,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    await addDoc(collection(db, 'queries'), payload);
+    return true;
+  },
+
+  getAllQueries: async () => {
+    const q = query(collection(db, 'queries'));
     const querySnapshot = await getDocs(q);
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

@@ -22,6 +22,7 @@ const JobCard = ({
   const valueClass = isTamil ? 'text-xs' : 'text-[13px]';
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
+  const [copied, setCopied] = useState(false);
 
   const { 
     title, 
@@ -33,19 +34,21 @@ const JobCard = ({
     workersNeeded, 
     workersSelectedCount = 0,
     applicants = [],
+    selectedWorkers = [],
     status,
     createdAt
   } = job;
 
   const [workerProfile, setWorkerProfile] = useState(null);
   const [loadingWorker, setLoadingWorker] = useState(false);
+  const targetWorkerId = job.workerId || (selectedWorkers && selectedWorkers[0]);
 
   useEffect(() => {
     const fetchWorkerProfile = async () => {
-      if (status === 'completed' && userRole === 'employer' && job.workerId) {
+      if (status === 'completed' && userRole === 'employer' && targetWorkerId) {
         try {
           setLoadingWorker(true);
-          const profile = await authService.getCurrentUser(job.workerId);
+          const profile = await authService.getCurrentUser(targetWorkerId);
           setWorkerProfile(profile);
           setLoadingWorker(false);
         } catch (e) {
@@ -55,7 +58,7 @@ const JobCard = ({
       }
     };
     fetchWorkerProfile();
-  }, [status, userRole, job.workerId]);
+  }, [status, userRole, targetWorkerId]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -263,52 +266,67 @@ const JobCard = ({
                 {loadingWorker ? (
                   <div className="text-slate-400 animate-pulse text-xs font-semibold py-2">Loading worker details...</div>
                 ) : workerProfile ? (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-3">
-                      <div>
-                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker</span>
-                        <span className="font-bold text-slate-800 text-[13px]">{workerProfile.name}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">UPI ID</span>
-                        <span className="font-mono font-bold text-slate-800 text-[11px] break-all">{workerProfile.upiId || 'Not Registered'}</span>
-                      </div>
-                    </div>
+                  (() => {
+                    const cleanPhone = workerProfile.phone ? workerProfile.phone.replace(/[^0-9]/g, '').slice(-10) : '';
+                    
+                    return (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-3">
+                          <div>
+                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker</span>
+                            <span className="font-bold text-slate-800 text-[13px]">{workerProfile.name}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Phone Number</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono font-bold text-slate-800 text-[11px] break-all">{workerProfile.phone || 'Not Registered'}</span>
+                              {workerProfile.phone && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const cleanNum = workerProfile.phone.replace(/[^0-9]/g, '').slice(-10);
+                                    navigator.clipboard.writeText(cleanNum);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 2000);
+                                  }}
+                                  className="text-[9px] font-extrabold text-primary hover:text-primary-dark transition-colors focus:outline-none flex items-center gap-0.5 bg-primary/5 hover:bg-primary/10 px-1.5 py-0.5 rounded cursor-pointer"
+                                  title="Copy 10-digit number"
+                                >
+                                  {copied ? 'Copied!' : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                    <div className="flex items-center justify-between pt-1">
-                      <div>
-                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Amount</span>
-                        <span className="font-extrabold text-slate-900 text-sm">₹{payment}</span>
-                      </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <div>
+                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Amount</span>
+                            <span className="font-extrabold text-slate-900 text-sm">₹{payment}</span>
+                          </div>
 
-                      <div className="flex gap-2 shrink-0">
-                        {workerProfile.upiId && job.paymentStatus !== 'paid' && (
-                          <a
-                            href={`upi://pay?pa=${workerProfile.upiId}&pn=${encodeURIComponent(workerProfile.name)}&am=${payment}&cu=INR`}
-                            className="bg-primary hover:bg-primary-dark text-white font-bold px-3 py-2 rounded-xl text-xs shadow-md transition-all flex items-center justify-center hover:scale-102 touch-target"
-                          >
-                            Pay via UPI
-                          </a>
-                        )}
-                        {job.paymentStatus !== 'paid' ? (
-                          <button
-                            type="button"
-                            onClick={() => onMarkPaid && onMarkPaid(job.id, job.workerId, title)}
-                            className="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-md transition-colors touch-target"
-                          >
-                            Mark as Paid
-                          </button>
-                        ) : (
-                          <button
-                            disabled
-                            className="bg-slate-100 text-slate-400 border border-slate-200 font-bold px-3 py-2 rounded-xl text-xs cursor-not-allowed"
-                          >
-                            Mark as Paid
-                          </button>
-                        )}
+                          <div className="flex gap-2 shrink-0">
+                            {job.paymentStatus !== 'paid' ? (
+                              <button
+                                type="button"
+                                onClick={() => onMarkPaid && onMarkPaid(job.id, targetWorkerId, title)}
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-md transition-colors touch-target cursor-pointer"
+                              >
+                                Mark as Paid
+                              </button>
+                            ) : (
+                              <button
+                                disabled
+                                className="bg-slate-100 text-slate-400 border border-slate-200 font-bold px-3 py-2 rounded-xl text-xs cursor-not-allowed"
+                              >
+                                Mark as Paid
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()
                 ) : (
                   <div className="text-red-500 font-bold py-2">Worker details not found.</div>
                 )}

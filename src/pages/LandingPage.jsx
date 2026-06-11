@@ -2,10 +2,16 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, ShieldCheck, MapPin, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useMetadata } from '../hooks/useMetadata';
 
 const LandingPage = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  useMetadata(
+    "WorkLink - Hyperlocal Part-Time Jobs & Helpers Marketplace",
+    "WorkLink connects shop owners, local employers, and households with verified part-time helpers in their neighborhood instantly. Easy UPI payments and Aadhaar verified badges."
+  );
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-between">

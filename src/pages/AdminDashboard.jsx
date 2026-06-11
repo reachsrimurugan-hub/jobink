@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../services/db';
+import { authService, reportService, queryService } from '../services/db';
 import Navbar from '../components/Navbar';
-import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare } from 'lucide-react';
+import { useMetadata } from '../hooks/useMetadata';
 
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
+
+  useMetadata(
+    "Admin Dashboard - WorkLink",
+    "Audit Aadhaar verifications, review phone change request queues, handle user reporting, and resolve user query communications."
+  );
   const [pendingUsers, setPendingUsers] = useState([]);
   const [pendingPhoneChanges, setPendingPhoneChanges] = useState([]);
+  const [pendingReports, setPendingReports] = useState([]);
+  const [queries, setQueries] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState('identity');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,6 +33,12 @@ const AdminDashboard = () => {
 
       const phoneChanges = await authService.getPendingPhoneChanges();
       setPendingPhoneChanges(phoneChanges);
+
+      const reports = await reportService.getPendingReports();
+      setPendingReports(reports);
+
+      const userQueries = await queryService.getAllQueries();
+      setQueries(userQueries);
       
       setLoading(false);
     } catch (err) {
@@ -37,6 +51,41 @@ const AdminDashboard = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleRemoveUser = async (uid, reportId) => {
+    setError('');
+    setSuccess('');
+    if (!window.confirm("Are you sure you want to permanently remove this user from the platform? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await reportService.removeUser(uid);
+      setSuccess('User removed and associated pending reports resolved!');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to remove user.');
+      setLoading(false);
+    }
+  };
+
+  const handleResolveReport = async (reportId) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await reportService.resolveReport(reportId);
+      setSuccess('Report resolved successfully.');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to resolve report.');
+      setLoading(false);
+    }
+  };
 
   const handleApprove = async (uid) => {
     setError('');
@@ -138,7 +187,7 @@ const AdminDashboard = () => {
         )}
 
         {/* Sub-tabs Selector */}
-        <div className="flex gap-4 border-b border-slate-200 mb-6">
+        <div className="flex gap-4 border-b border-slate-200 mb-6 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveSubTab('identity')}
@@ -160,6 +209,28 @@ const AdminDashboard = () => {
             }`}
           >
             📞 Phone Change Requests ({pendingPhoneChanges.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('reports')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'reports'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            ⚠️ User Reports ({pendingReports.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('queries')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'queries'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            💬 User Queries ({queries.length})
           </button>
         </div>
 
@@ -333,6 +404,126 @@ const AdminDashboard = () => {
                           <CheckCircle size={15} />
                           Approve
                         </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 3: User Reports Queue */}
+        {activeSubTab === 'reports' && (
+          <div>
+            {loading && pendingReports.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : pendingReports.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">No Pending User Reports!</p>
+                <p className="text-xs text-slate-400">All submitted reports have been reviewed and audited.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  Pending Reports ({pendingReports.length})
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {pendingReports.map((rep) => (
+                    <div key={rep.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
+                      <div className="flex-1 space-y-2 text-left">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-red-50 text-red-700 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase">
+                            {rep.reason}
+                          </span>
+                          <h4 className="font-extrabold text-slate-800 text-sm">
+                            Reported: <span className="text-slate-900">{rep.reportedName}</span>
+                          </h4>
+                          <span className="text-[10px] text-slate-400">UID: {rep.reportedId}</span>
+                        </div>
+                        
+                        <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 p-3 rounded-lg italic">
+                          "{rep.details}"
+                        </p>
+                        
+                        <div className="text-[10px] text-slate-500 flex gap-4">
+                          <span>Reported by: <strong>{rep.reporterName}</strong> (UID: {rep.reporterId})</span>
+                          <span>•</span>
+                          <span>Date: {new Date(rep.createdAt).toLocaleDateString('en-IN')}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => handleResolveReport(rep.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs border border-slate-200 touch-target cursor-pointer"
+                        >
+                          Dismiss Report
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUser(rep.reportedId, rep.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
+                        >
+                          Remove User
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: User Queries */}
+        {activeSubTab === 'queries' && (
+          <div>
+            {loading && queries.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : queries.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">No User Queries Found!</p>
+                <p className="text-xs text-slate-400">Users have not submitted any queries to the admin yet.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  User Queries ({queries.length})
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {queries.map((q) => (
+                    <div key={q.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-3 text-left">
+                      <div className="flex justify-between items-start gap-2 flex-wrap pb-2 border-b border-slate-50">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-slate-800 text-sm">{q.userName}</h4>
+                            <span className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded border ${
+                              q.userRole === 'worker' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                              {q.userRole}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">Phone: {q.userPhone || 'N/A'} | UID: {q.userId}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(q.createdAt).toLocaleDateString('en-IN')} {new Date(q.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      
+                      <div className="text-xs text-slate-700 bg-slate-50 border border-slate-100/50 p-3.5 rounded-xl leading-relaxed whitespace-pre-wrap">
+                        {q.queryText}
                       </div>
                     </div>
                   ))}

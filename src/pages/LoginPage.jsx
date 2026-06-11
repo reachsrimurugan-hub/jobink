@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Phone, CheckCircle, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useMetadata } from '../hooks/useMetadata';
 
 const LoginPage = () => {
   const { loginWithPhone, confirmOTP, loginWithGoogle, otpRequested, phoneNumberAttempt } = useAuth();
@@ -13,6 +14,11 @@ const LoginPage = () => {
   const [loadingLocal, setLoadingLocal] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  useMetadata(
+    "Login to WorkLink - Connect Instantly",
+    "Log in securely using your mobile phone number and easy OTP verification to browse part-time jobs or hire manual helpers in your locality."
+  );
 
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
@@ -102,7 +108,7 @@ const LoginPage = () => {
       <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col gap-6 text-center">
         {/* Brand Header */}
         <div>
-          <span className="font-extrabold text-2xl text-primary tracking-tight">WorkLink</span>
+          <h1 className="font-extrabold text-2xl text-primary tracking-tight">WorkLink</h1>
           <p className="text-slate-500 text-xs mt-1.5">{t('appTagline')}</p>
         </div>
 

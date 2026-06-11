@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService, jobService, applicationService, notificationService, reviewService } from '../services/db';
+import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
@@ -12,12 +12,18 @@ import ProfileViewModal from '../components/ProfileViewModal';
 import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.png';
+import { useMetadata } from '../hooks/useMetadata';
 
 const EmployerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
+
+  useMetadata(
+    "Employer Dashboard - WorkLink",
+    "Post job requirements, audit applicant profiles, verify completed tasks, and manage part-time neighborhood hiring on WorkLink."
+  );
   const [myJobs, setMyJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -139,6 +145,42 @@ const EmployerDashboard = () => {
       console.error(err);
       setProfileError('Failed to save profile. Please try again.');
       setProfileSaving(false);
+    }
+  };
+
+  // Query states & handler
+  const [queryText, setQueryText] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [querySuccess, setQuerySuccess] = useState('');
+  const [queryError, setQueryError] = useState('');
+
+  const handleQuerySubmit = async (e) => {
+    e.preventDefault();
+    setQueryError('');
+    setQuerySuccess('');
+    
+    if (!queryText.trim()) {
+      setQueryError('Please enter a query message.');
+      return;
+    }
+
+    try {
+      setQueryLoading(true);
+      await queryService.submitQuery(
+        currentUser.uid,
+        currentUser.name || 'User',
+        currentUser.phone || '',
+        currentUser.role,
+        queryText
+      );
+      setQuerySuccess('Query sent to Admin successfully!');
+      setQueryText('');
+      setTimeout(() => setQuerySuccess(''), 3000);
+      setQueryLoading(false);
+    } catch (err) {
+      console.error(err);
+      setQueryError('Failed to send query.');
+      setQueryLoading(false);
     }
   };
 
@@ -316,6 +358,32 @@ const EmployerDashboard = () => {
       setApplicants(data);
       await loadEmployerData();
       setApplicantsLoading(false);
+    } catch (err) {
+      console.error(err);
+      setApplicantsLoading(false);
+    }
+  };
+
+  const handleVerifyWorkCompleted = async (jobId, workerId, workerName) => {
+    try {
+      setApplicantsLoading(true);
+      // 1. Update workStatus to completed
+      await applicationService.updateWorkStatus(jobId, workerId, 'completed');
+      
+      // 2. Refresh applicants list and job overview
+      const data = await applicationService.getJobApplications(jobId);
+      setApplicants(data);
+      await loadEmployerData();
+      setApplicantsLoading(false);
+      
+      // 3. Close applicants modal and trigger rating modal
+      setIsApplicantsOpen(false);
+      setReviewJobId(jobId);
+      setReviewWorkerId(workerId);
+      setReviewWorkerName(workerName || t('worker'));
+      setWorkerRating(5);
+      setWorkerComment('');
+      setIsReviewOpen(true);
     } catch (err) {
       console.error(err);
       setApplicantsLoading(false);
@@ -570,7 +638,7 @@ const EmployerDashboard = () => {
                 </div>
 
                 {/* Bottom Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
                   {/* Column 1: Current Open Posts */}
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center px-1">
@@ -654,6 +722,52 @@ const EmployerDashboard = () => {
                           })}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Column 3: Query Admin */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex justify-between items-center px-1">
+                      <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+                        💬 Query Admin
+                      </h3>
+                    </div>
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm text-left min-h-[220px] flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <p className="text-slate-500 text-[11px] leading-relaxed">
+                          Need assistance or have query regarding listings? Send a direct message to the admin.
+                        </p>
+
+                        {queryError && (
+                          <div className="bg-red-50 text-red-700 text-[10px] font-semibold p-2 rounded border border-red-100">
+                            {queryError}
+                          </div>
+                        )}
+                        {querySuccess && (
+                          <div className="bg-green-50 text-green-700 text-[10px] font-semibold p-2 rounded border border-green-100">
+                            {querySuccess}
+                          </div>
+                        )}
+                      </div>
+
+                      <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3 text-xs mt-3">
+                        <textarea
+                          rows={3}
+                          placeholder="Type your query here..."
+                          value={queryText}
+                          onChange={(e) => setQueryText(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800 text-[11px]"
+                          required
+                          disabled={queryLoading}
+                        />
+                        <button
+                          type="submit"
+                          disabled={queryLoading}
+                          className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
+                        >
+                          {queryLoading ? 'Sending...' : 'Send Message'}
+                        </button>
+                      </form>
                     </div>
                   </div>
                 </div>
@@ -982,7 +1096,40 @@ const EmployerDashboard = () => {
                       </button>
                     </>
                   ) : app.status === 'selected' ? (
-                    <div className="flex flex-col gap-2 w-full">
+                    <div className="flex flex-col gap-2.5 w-full">
+                      {/* Hired Worker Work Status */}
+                      <div className="bg-slate-50 border border-slate-200/80 p-2.5 rounded-xl flex items-center justify-between text-xs font-semibold">
+                        <span className="text-slate-500">Work Status:</span>
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                          app.workStatus === 'started' 
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                            : app.workStatus === 'finished'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : app.workStatus === 'completed'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-slate-50 text-slate-500 border border-slate-200'
+                        }`}>
+                          {app.workStatus === 'started' 
+                            ? 'Work Started' 
+                            : app.workStatus === 'finished'
+                              ? 'Finished - Verify Needed'
+                              : app.workStatus === 'completed'
+                                ? 'Completed & Approved'
+                                : 'Not Started'}
+                        </span>
+                      </div>
+
+                      {/* Verify & Complete Work Button */}
+                      {app.workStatus === 'finished' && (
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyWorkCompleted(selectedJobId, app.workerId, app.workerName)}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
+                        >
+                          Verify & Mark Completed
+                        </button>
+                      )}
+
                       <div className="flex gap-2 w-full">
                         <a 
                           href={`tel:${app.workerPhone}`}

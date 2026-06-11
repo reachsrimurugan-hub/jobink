@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import RatingStars from './RatingStars';
-import { authService, reviewService } from '../services/db';
-import { BadgeCheck, MapPin, Briefcase, Star, Clock, AlertCircle } from 'lucide-react';
+import { authService, reviewService, reportService } from '../services/db';
+import { BadgeCheck, MapPin, Briefcase, Star, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
 
 const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, currentUserName, canWriteReview }) => {
   const [profile, setProfile] = useState(null);
@@ -16,6 +16,14 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
+
+  // Submit Report form state
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportReason, setReportReason] = useState('Fraud User / Scam');
+  const [reportDetails, setReportDetails] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportSuccess, setReportSuccess] = useState('');
 
   const loadProfileData = async () => {
     if (!targetUserId) return;
@@ -90,6 +98,41 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
       console.error(err);
       setSubmitError('Failed to submit review. Please try again.');
       setSubmitLoading(false);
+    }
+  };
+
+  const handleReportSubmit = async (e) => {
+    e.preventDefault();
+    setReportError('');
+    setReportSuccess('');
+    
+    if (!reportDetails.trim()) {
+      setReportError('Please provide details for the report.');
+      return;
+    }
+
+    try {
+      setReportLoading(true);
+      await reportService.submitReport(
+        currentUserId,
+        currentUserName || 'User',
+        targetUserId,
+        profile.name,
+        reportReason,
+        reportDetails
+      );
+      setReportSuccess('User has been reported to Admin successfully.');
+      setReportDetails('');
+      setReportReason('Fraud User / Scam');
+      setTimeout(() => {
+        setShowReportForm(false);
+        setReportSuccess('');
+      }, 3000);
+      setReportLoading(false);
+    } catch (err) {
+      console.error(err);
+      setReportError('Failed to submit report.');
+      setReportLoading(false);
     }
   };
 
@@ -177,6 +220,97 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
               </div>
             )}
           </div>
+
+          {/* Report User Trigger / Card */}
+          {currentUserId !== targetUserId && (
+            <div className="border-t border-slate-100 pt-4">
+              {!showReportForm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowReportForm(true)}
+                  className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100/50 cursor-pointer transition-colors"
+                >
+                  <AlertTriangle size={14} />
+                  Report User
+                </button>
+              ) : (
+                <div className="bg-red-50/50 border border-red-200 p-4 rounded-xl flex flex-col gap-3.5">
+                  <div className="flex justify-between items-center">
+                    <h5 className="font-extrabold text-red-800 text-xs uppercase tracking-wide flex items-center gap-1">
+                      <AlertTriangle size={14} className="text-red-600 shrink-0" />
+                      Report User for Fraud
+                    </h5>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReportForm(false);
+                        setReportError('');
+                        setReportSuccess('');
+                      }}
+                      className="text-[10px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {reportError && (
+                    <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                      {reportError}
+                    </div>
+                  )}
+                  {reportSuccess && (
+                    <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                      {reportSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleReportSubmit} className="flex flex-col gap-3 text-xs text-left">
+                    <div>
+                      <label htmlFor="reportReasonSelect" className="block text-[10px] font-bold text-slate-655 uppercase mb-1.5">
+                        Select Reason
+                      </label>
+                      <select
+                        id="reportReasonSelect"
+                        value={reportReason}
+                        onChange={(e) => setReportReason(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-800 font-semibold focus:border-red-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Fraud User / Scam">Fraud User / Scam</option>
+                        <option value="Not Proper Payment">Not Proper Payment</option>
+                        <option value="Abusive Behavior / Harassment">Abusive Behavior / Harassment</option>
+                        <option value="No-show / Absent">No-show / Absent</option>
+                        <option value="Other">Other Reason</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="reportDetailsText" className="block text-[10px] font-bold text-slate-655 uppercase mb-1.5">
+                        Provide Explanation/Proof
+                      </label>
+                      <textarea
+                        id="reportDetailsText"
+                        rows={3}
+                        placeholder="Please describe exactly what happened..."
+                        value={reportDetails}
+                        onChange={(e) => setReportDetails(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-red-500 focus:outline-none"
+                        required
+                        disabled={reportLoading}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={reportLoading}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors flex items-center justify-center cursor-pointer"
+                    >
+                      {reportLoading ? 'Submitting Report...' : 'Submit Report'}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit Review section */}
           {canWriteReview && (

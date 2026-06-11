@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService, jobService, applicationService, notificationService, reviewService } from '../services/db';
+import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
@@ -10,14 +10,20 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
 import Modal from '../components/Modal';
-import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3, ShieldAlert } from 'lucide-react';
+import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useMetadata } from '../hooks/useMetadata';
 
 const WorkerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
+
+  useMetadata(
+    "Worker Dashboard - WorkLink",
+    "View available local jobs, start work, complete tasks, receive payments directly via UPI, and manage your applications."
+  );
   const [jobs, setJobs] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -41,6 +47,12 @@ const WorkerDashboard = () => {
   // Filtering States (Default to worker's registered location)
   const [filterCity, setFilterCity] = useState(currentUser?.city || '');
   const [filterArea, setFilterArea] = useState(currentUser?.area || '');
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Applications Filtering States
+  const [appSearchQuery, setAppSearchQuery] = useState('');
+  const [appStatusFilter, setAppStatusFilter] = useState('all');
+  const [showAppFilters, setShowAppFilters] = useState(false);
   
   // Availability toggle loading helper
   const [availLoading, setAvailLoading] = useState(false);
@@ -52,7 +64,6 @@ const WorkerDashboard = () => {
   const [profileError, setProfileError] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [editUpiId, setEditUpiId] = useState('');
 
   // Phone Change States
   const [newPhone, setNewPhone] = useState('');
@@ -68,7 +79,6 @@ const WorkerDashboard = () => {
     if (currentUser) {
       setEditPhoto(currentUser.profilePhotoUrl || '');
       setEditDescription(currentUser.description || '');
-      setEditUpiId(currentUser.upiId || '');
     }
   }, [currentUser]);
 
@@ -100,8 +110,7 @@ const WorkerDashboard = () => {
     try {
       await updateProfile({
         profilePhotoUrl: editPhoto || currentUser.profilePhotoUrl,
-        description: editDescription,
-        upiId: editUpiId
+        description: editDescription
       });
       setProfileSuccess('Profile updated successfully!');
       setProfileSaving(false);
@@ -277,6 +286,42 @@ const WorkerDashboard = () => {
     }
   };
 
+  // Query states & handler
+  const [queryText, setQueryText] = useState('');
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [querySuccess, setQuerySuccess] = useState('');
+  const [queryError, setQueryError] = useState('');
+
+  const handleQuerySubmit = async (e) => {
+    e.preventDefault();
+    setQueryError('');
+    setQuerySuccess('');
+    
+    if (!queryText.trim()) {
+      setQueryError('Please enter a query message.');
+      return;
+    }
+
+    try {
+      setQueryLoading(true);
+      await queryService.submitQuery(
+        currentUser.uid,
+        currentUser.name || 'User',
+        currentUser.phone || '',
+        currentUser.role,
+        queryText
+      );
+      setQuerySuccess('Query sent to Admin successfully!');
+      setQueryText('');
+      setTimeout(() => setQuerySuccess(''), 3000);
+      setQueryLoading(false);
+    } catch (err) {
+      console.error(err);
+      setQueryError('Failed to send query.');
+      setQueryLoading(false);
+    }
+  };
+
   // Apply to a job
   const handleApplyJob = async (jobId) => {
     if (!currentUser.verified) return;
@@ -292,6 +337,62 @@ const WorkerDashboard = () => {
       setLoading(false);
     }
   };
+
+  // Update worker status for a job (start / finish)
+  const handleUpdateWorkStatus = async (jobId, workerId, status) => {
+    try {
+      setLoading(true);
+      await applicationService.updateWorkStatus(jobId, workerId, status);
+      await loadApplications();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const filteredAndSortedJobs = useMemo(() => {
+    let result = [...jobs];
+
+    // 1. Text Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(job => 
+        (job.title && job.title.toLowerCase().includes(q)) ||
+        (job.description && job.description.toLowerCase().includes(q)) ||
+        (job.location && job.location.toLowerCase().includes(q))
+      );
+    }
+
+    return result;
+  }, [jobs, searchQuery]);
+
+  const filteredApplications = useMemo(() => {
+    let result = [...myApplications];
+
+    // 1. Text Search Query
+    if (appSearchQuery.trim()) {
+      const q = appSearchQuery.toLowerCase();
+      result = result.filter(app => 
+        (app.jobTitle && app.jobTitle.toLowerCase().includes(q)) ||
+        (app.employerName && app.employerName.toLowerCase().includes(q)) ||
+        (app.jobLocation && app.jobLocation.toLowerCase().includes(q))
+      );
+    }
+
+    // 2. Status Filter
+    if (appStatusFilter !== 'all') {
+      if (appStatusFilter === 'pending') {
+        result = result.filter(app => app.status === 'pending');
+      } else if (appStatusFilter === 'booked') {
+        result = result.filter(app => app.status === 'selected' && app.jobStatus !== 'completed');
+      } else if (appStatusFilter === 'completed') {
+        result = result.filter(app => app.status === 'selected' && app.jobStatus === 'completed');
+      }
+    }
+
+    return result;
+  }, [myApplications, appSearchQuery, appStatusFilter]);
 
   // Notification Mark Read
   const handleMarkNotifRead = async (id) => {
@@ -340,128 +441,197 @@ const WorkerDashboard = () => {
 
           {/* TAB 1: Job Feed */}
           {activeTab === 'home' && (
-            <div className="flex flex-col gap-6">
-              {/* Availability Panel */}
-              <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
-                <div className="text-left">
-                  <h3 className="font-bold text-slate-800 text-sm">{t('myAvailability')}</h3>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    {currentUser.availability 
-                      ? t('availableDesc')
-                      : t('busyDesc')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAvailabilityToggle}
-                  disabled={availLoading}
-                  className={`text-xs font-bold px-4 py-2.5 rounded-lg border shadow-sm transition-all touch-target flex items-center justify-center ${
-                    currentUser.availability 
-                      ? 'bg-green-600 hover:bg-green-700 text-white border-green-700' 
-                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  {availLoading ? t('updating') : currentUser.availability ? t('available') : t('busy')}
-                </button>
-              </div>
-
-              {/* Location Filter */}
-              <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm text-left flex flex-col gap-3">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <MapPin size={16} className="text-primary" />
-                  {t('filterHyperlocalJobs')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="feedCity" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">{t('city')}</label>
-                    <select
-                      id="feedCity"
-                      value={filterCity}
-                      onChange={(e) => {
-                        setFilterCity(e.target.value);
-                        setFilterArea('');
-                      }}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target cursor-pointer"
-                    >
-                      <option value="">{t('allCities')}</option>
-                      {CITIES.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+              {/* Left & Center Columns: Job Feed */}
+              <div className="md:col-span-2 flex flex-col gap-6">
+                {/* Availability Panel */}
+                <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="text-left">
+                    <h3 className="font-bold text-slate-800 text-sm">{t('myAvailability')}</h3>
+                    <p className="text-slate-500 text-xs mt-0.5">
+                      {currentUser.availability 
+                        ? t('availableDesc')
+                        : t('busyDesc')}
+                    </p>
                   </div>
-                  <div>
-                    <label htmlFor="feedArea" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">{t('area')}</label>
-                    <select
-                      id="feedArea"
-                      value={filterArea}
-                      onChange={(e) => setFilterArea(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target cursor-pointer"
-                      disabled={!filterCity}
-                    >
-                      <option value="">{t('allAreas')}</option>
-                      {filterCity && LOCATIONS[filterCity]?.map(a => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Jobs List */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                    {t('jobsIn')} {filterArea || filterCity || t('allLocations')} ({jobs.length})
-                  </h2>
-                  <button 
-                    type="button" 
-                    onClick={loadJobs} 
-                    className="text-xs font-bold text-primary hover:underline touch-target cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={handleAvailabilityToggle}
+                    disabled={availLoading}
+                    className={`text-xs font-bold px-4 py-2.5 rounded-lg border shadow-sm transition-all touch-target flex items-center justify-center ${
+                      currentUser.availability 
+                        ? 'bg-green-600 hover:bg-green-700 text-white border-green-700' 
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
                   >
-                    {t('refreshFeed')}
+                    {availLoading ? t('updating') : currentUser.availability ? t('available') : t('busy')}
                   </button>
                 </div>
 
-                {loading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[1, 2].map((n) => (
-                      <div key={n} className="bg-white border border-slate-100 p-4 rounded-xl animate-pulse h-40 flex flex-col justify-between">
-                        <div className="space-y-2">
-                          <div className="h-4 bg-slate-200 rounded w-2/3"></div>
-                          <div className="h-3 bg-slate-200 rounded w-1/2"></div>
-                          <div className="h-3 bg-slate-200 rounded w-full"></div>
+                {/* Search & Filter Panel */}
+                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm text-left flex flex-col gap-4">
+                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                    <SlidersHorizontal size={16} className="text-primary" />
+                    {t('filterHyperlocalJobs')}
+                  </h3>
+
+                  {/* 1. Search Bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={t('searchJobs')}
+                      className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:bg-white focus:border-primary focus:outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* 2. City & Area Selectors */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="feedCity" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">{t('city')}</label>
+                      <select
+                        id="feedCity"
+                        value={filterCity}
+                        onChange={(e) => {
+                          setFilterCity(e.target.value);
+                          setFilterArea('');
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
+                      >
+                        <option value="">{t('allCities')}</option>
+                        {CITIES.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="feedArea" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">{t('area')}</label>
+                      <select
+                        id="feedArea"
+                        value={filterArea}
+                        onChange={(e) => setFilterArea(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
+                        disabled={!filterCity}
+                      >
+                        <option value="">{t('allAreas')}</option>
+                        {filterCity && LOCATIONS[filterCity]?.map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Jobs List */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                      {t('jobsIn')} {filterArea || filterCity || t('allLocations')} ({filteredAndSortedJobs.length})
+                    </h2>
+                    <button 
+                      type="button" 
+                      onClick={loadJobs} 
+                      className="text-xs font-bold text-primary hover:underline touch-target cursor-pointer"
+                    >
+                      {t('refreshFeed')}
+                    </button>
+                  </div>
+
+                  {loading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {[1, 2].map((n) => (
+                        <div key={n} className="bg-white border border-slate-100 p-4 rounded-xl animate-pulse h-40 flex flex-col justify-between">
+                          <div className="space-y-2">
+                            <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+                            <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                            <div className="h-3 bg-slate-200 rounded w-full"></div>
+                          </div>
+                          <div className="h-8 bg-slate-200 rounded w-full"></div>
                         </div>
-                        <div className="h-8 bg-slate-200 rounded w-full"></div>
-                      </div>
-                    ))}
-                  </div>
-                ) : jobs.length === 0 ? (
-                  <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
-                    <Briefcase size={36} className="text-slate-300" />
-                    <p className="text-sm font-medium text-slate-500">{t('noActiveJobsFound')}</p>
-                    <p className="text-xs text-slate-400">{t('changeFilterDesc')}</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {jobs.map((job) => {
-                      const isApplied = myApplications.some(app => app.jobId === job.id);
-                      const appStatus = myApplications.find(app => app.jobId === job.id)?.status;
-                      
-                      return (
-                        <JobCard
-                          key={job.id}
-                          job={job}
-                          userRole="worker"
-                          isApplied={isApplied}
-                          applicationStatus={appStatus}
-                          isUserVerified={currentUser.verified}
-                          onApply={handleApplyJob}
-                          onViewEmployerProfile={handleViewEmployerProfile}
-                        />
-                      );
-                    })}
+                      ))}
+                    </div>
+                  ) : filteredAndSortedJobs.length === 0 ? (
+                    <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                      <Briefcase size={36} className="text-slate-300" />
+                      <p className="text-sm font-medium text-slate-500">
+                        {jobs.length === 0 ? t('noActiveJobsFound') : "No jobs found matching your criteria."}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {jobs.length === 0 ? t('changeFilterDesc') : "Try resetting your search query or filters."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {filteredAndSortedJobs.map((job) => {
+                        const isApplied = myApplications.some(app => app.jobId === job.id);
+                        const appStatus = myApplications.find(app => app.jobId === job.id)?.status;
+                        
+                        return (
+                          <JobCard
+                            key={job.id}
+                            job={job}
+                            userRole="worker"
+                            isApplied={isApplied}
+                            applicationStatus={appStatus}
+                            isUserVerified={currentUser.verified}
+                            onApply={handleApplyJob}
+                            onViewEmployerProfile={handleViewEmployerProfile}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Query Admin */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <MessageSquare className="text-primary shrink-0" size={18} />
+                  <h3 className="font-extrabold text-slate-800 text-sm">💬 Query Admin</h3>
+                </div>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Have any queries or need assistance? Type your message below to notify the WorkLink admin directly.
+                </p>
+
+                {queryError && (
+                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                    {queryError}
                   </div>
                 )}
+                {querySuccess && (
+                  <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                    {querySuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3.5 text-xs">
+                  <div>
+                    <label htmlFor="workerQueryText" className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
+                      Your Message
+                    </label>
+                    <textarea
+                      id="workerQueryText"
+                      rows={4}
+                      placeholder="Describe your query or issue here..."
+                      value={queryText}
+                      onChange={(e) => setQueryText(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800"
+                      required
+                      disabled={queryLoading}
+                    />
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={queryLoading}
+                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
+                  >
+                    {queryLoading ? 'Sending...' : 'Send Message'}
+                  </button>
+                </form>
               </div>
             </div>
           )}
@@ -470,8 +640,61 @@ const WorkerDashboard = () => {
           {activeTab === 'applications' && (
             <div className="flex flex-col gap-4">
               <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 text-left">
-                {t('myApplications')} ({myApplications.length})
+                {t('myApplications')} ({filteredApplications.length})
               </h2>
+              {/* Minimized Search & Filter Panel for Applications */}
+              {myApplications.length > 0 && (
+                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm text-left flex flex-col gap-4 mb-2">
+                  {/* Search Bar + Filter Icon Row */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input
+                        type="text"
+                        value={appSearchQuery}
+                        onChange={(e) => setAppSearchQuery(e.target.value)}
+                        placeholder={t('searchJobs')}
+                        className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50 focus:bg-white focus:border-primary focus:outline-none transition-all"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAppFilters(!showAppFilters)}
+                      className={`px-3 py-2.5 border ${
+                        appStatusFilter !== 'all' ? 'border-primary text-primary bg-primary/5' : 'border-slate-200 text-slate-700 bg-white'
+                      } rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer flex items-center justify-center`}
+                      title="Filter by Status"
+                    >
+                      <Filter size={16} />
+                    </button>
+                  </div>
+
+                  {/* Filter Tags Panel */}
+                  {showAppFilters && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                      {[
+                        { id: 'all', label: t('all') },
+                        { id: 'pending', label: t('pending') },
+                        { id: 'booked', label: t('bookedFilled') },
+                        { id: 'completed', label: t('completed') }
+                      ].map(tag => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => setAppStatusFilter(tag.id)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                            appStatusFilter === tag.id
+                              ? 'bg-primary border-primary text-white shadow-sm'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tag.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {myApplications.length === 0 ? (
                 <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
@@ -485,9 +708,15 @@ const WorkerDashboard = () => {
                     {t('browseJobsFeed')}
                   </button>
                 </div>
+              ) : filteredApplications.length === 0 ? (
+                <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                  <Briefcase size={36} className="text-slate-300" />
+                  <p className="text-sm font-medium text-slate-500">No applications match your search criteria.</p>
+                  <p className="text-xs text-slate-400 font-medium">Try resetting your search query or status filters.</p>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {myApplications.map((app) => (
+                  {filteredApplications.map((app) => (
                     <div key={app.id} className="bg-white border border-slate-200 rounded-xl p-4 text-left shadow-sm flex flex-col gap-3.5">
                       <div className="flex items-start justify-between gap-2 border-b border-slate-50 pb-2">
                         <h4 className="font-bold text-slate-800 text-sm leading-snug">{app.jobTitle}</h4>
@@ -505,27 +734,90 @@ const WorkerDashboard = () => {
                       <div className="text-xs text-slate-600 space-y-1">
                         <div className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {app.jobLocation}</div>
                         <div className="flex items-center gap-1.5"><Clock size={14} className="text-slate-400" /> {t('applied')}: {new Date(app.appliedAt).toLocaleDateString('en-IN')}</div>
+                        {app.employerName && (
+                          <div className="text-xs text-slate-600 flex items-center gap-1.5 pt-0.5">
+                            <User size={14} className="text-slate-400" />
+                            <span>{t('postedBy')}:</span>
+                            <button
+                              type="button"
+                              onClick={() => handleViewEmployerProfile(app.employerId)}
+                              className="font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer text-left focus:outline-none"
+                            >
+                              {app.employerName}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Selected actions (Active Jobs) */}
                       {app.status === 'selected' && app.jobStatus !== 'completed' && (
-                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2.5">
                           <span className="text-[11px] font-bold text-green-600 block">✓ {t('youHaveBeenSelected')}</span>
                           <div className="flex gap-2">
                             <a 
-                              href={`tel:${app.workerPhone}`} // Fallback or employer phone
+                              href={`tel:${app.employerPhone || app.workerPhone}`}
                               className="flex-1 text-center bg-slate-100 border border-slate-200 text-slate-700 font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
                             >
                               {t('callEmployer')}
                             </a>
                             <a 
-                              href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello, I am ready to work for "${app.jobTitle}"!`}
+                              href={`https://wa.me/${(app.employerPhone || app.workerPhone)?.replace(/[^0-9]/g, '')}?text=Hello, I am ready to work for "${app.jobTitle}"!`}
                               target="_blank"
                               rel="noreferrer"
                               className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
                             >
                               {t('whatsapp')}
                             </a>
+                          </div>
+
+                          {/* Work Status Buttons for Worker */}
+                          <div className="border-t border-slate-100 pt-2.5 mt-1 flex flex-col gap-2">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <span className="text-slate-500">Work Status:</span>
+                              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                                app.workStatus === 'started' 
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                                  : app.workStatus === 'finished'
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : app.workStatus === 'completed'
+                                      ? 'bg-green-50 text-green-700 border border-green-200'
+                                      : 'bg-slate-50 text-slate-500 border border-slate-200'
+                              }`}>
+                                {app.workStatus === 'started' 
+                                  ? 'Work Started' 
+                                  : app.workStatus === 'finished'
+                                    ? 'Finished - Awaiting Approval'
+                                    : app.workStatus === 'completed'
+                                      ? 'Completed & Approved'
+                                      : 'Not Started'}
+                              </span>
+                            </div>
+
+                            {(!app.workStatus || app.workStatus === 'booked') && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateWorkStatus(app.jobId, app.workerId, 'started')}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
+                              >
+                                Start Work
+                              </button>
+                            )}
+
+                            {app.workStatus === 'started' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateWorkStatus(app.jobId, app.workerId, 'finished')}
+                                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-lg text-xs shadow-sm transition-colors cursor-pointer text-center"
+                              >
+                                Finish Work
+                              </button>
+                            )}
+
+                            {app.workStatus === 'finished' && (
+                              <p className="text-[10px] text-slate-400 font-semibold italic text-center">
+                                Awaiting employer manually verifying work status...
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -759,21 +1051,6 @@ const WorkerDashboard = () => {
                     <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
                   )}
                 </div>
-              </div>
-
-              {/* UPI ID Input */}
-              <div>
-                <label htmlFor="upiId" className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
-                  UPI ID (for payments)
-                </label>
-                <input
-                  id="upiId"
-                  type="text"
-                  placeholder="e.g. name@upi"
-                  value={editUpiId}
-                  onChange={(e) => setEditUpiId(e.target.value.trim())}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-primary"
-                />
               </div>
 
               {/* Profile Description */}

@@ -4,11 +4,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
 import { ShieldCheck, UserCheck, Briefcase, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useMetadata } from '../hooks/useMetadata';
 
 const RegisterPage = () => {
   const { currentUser, updateProfile } = useAuth();
   const [step, setStep] = useState(1);
   const { t, i18n } = useTranslation();
+
+  useMetadata(
+    "Join WorkLink - Complete Your Profile",
+    "Register and complete your WorkLink profile. Choose your role as a helper or employer, list your skills, and verify your Aadhaar card for safety."
+  );
   
   // Registration States
   const [role, setRole] = useState('');
@@ -21,7 +27,6 @@ const RegisterPage = () => {
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarPhoto, setAadhaarPhoto] = useState('');
   const [profilePhoto, setProfilePhoto] = useState(currentUser?.profilePhotoUrl || '');
-  const [upiId, setUpiId] = useState('');
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -104,7 +109,6 @@ const RegisterPage = () => {
         profileData.availability = availability;
         profileData.rating = 0;
         profileData.ratingCount = 0;
-        profileData.upiId = upiId;
       } else {
         profileData.businessType = businessType;
       }
@@ -125,7 +129,7 @@ const RegisterPage = () => {
         {/* Step Indicator Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <span className="font-extrabold text-lg text-primary tracking-tight">{t('profileSetup')}</span>
+            <h1 className="font-extrabold text-lg text-primary tracking-tight">{t('profileSetup')}</h1>
             <p className="text-slate-500 text-xs mt-0.5">{t('profileSetupDesc')}</p>
           </div>
           <div className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded">
@@ -282,46 +286,29 @@ const RegisterPage = () => {
 
             {/* Worker Only: Skills Selection */}
             {role === 'worker' && (
-              <div className="flex flex-col gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                    {t('selectSkills')}
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-slate-200/80 p-3.5 rounded-xl bg-slate-50/50 no-scrollbar">
-                    {ALL_SKILLS.map((skill) => {
-                      const isChecked = skills.includes(skill);
-                      return (
-                        <button
-                          key={skill}
-                          type="button"
-                          onClick={() => handleSkillsToggle(skill)}
-                          className={`text-left p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                            isChecked 
-                              ? 'bg-primary/5 text-primary border-primary' 
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <span>{skill}</span>
-                          {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="upiOnboarding" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                    UPI ID (for payments)
-                  </label>
-                  <input
-                    id="upiOnboarding"
-                    type="text"
-                    placeholder="e.g. name@upi"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value.trim())}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
-                    required
-                  />
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                  {t('selectSkills')}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-slate-200/80 p-3.5 rounded-xl bg-slate-50/50 no-scrollbar">
+                  {ALL_SKILLS.map((skill) => {
+                    const isChecked = skills.includes(skill);
+                    return (
+                      <button
+                        key={skill}
+                        type="button"
+                        onClick={() => handleSkillsToggle(skill)}
+                        className={`text-left p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          isChecked 
+                            ? 'bg-primary/5 text-primary border-primary' 
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{skill}</span>
+                        {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
