@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Phone, CheckCircle, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const LoginPage = () => {
   const { loginWithPhone, confirmOTP, loginWithGoogle, otpRequested, phoneNumberAttempt } = useAuth();
@@ -11,6 +12,7 @@ const LoginPage = () => {
   const [success, setSuccess] = useState('');
   const [loadingLocal, setLoadingLocal] = useState(false);
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
@@ -29,7 +31,7 @@ const LoginPage = () => {
     try {
       setLoadingLocal(true);
       await loginWithPhone(formattedPhone, 'recaptcha-container');
-      setSuccess(`OTP sent to ${formattedPhone}`);
+      setSuccess(`${t('otpSentTo')} ${formattedPhone}`);
       setLoadingLocal(false);
     } catch (err) {
       console.error(err);
@@ -91,17 +93,17 @@ const LoginPage = () => {
       <button 
         type="button" 
         onClick={() => navigate('/')} 
-        className="absolute top-4 left-4 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm touch-target"
+        className="absolute top-4 left-4 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm touch-target cursor-pointer"
       >
         <ArrowLeft size={14} />
-        Back
+        {t('back')}
       </button>
 
       <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col gap-6 text-center">
         {/* Brand Header */}
         <div>
           <span className="font-extrabold text-2xl text-primary tracking-tight">WorkLink</span>
-          <p className="text-slate-500 text-xs mt-1.5">Hyperlocal Part-Time Job Marketplace</p>
+          <p className="text-slate-500 text-xs mt-1.5">{t('appTagline')}</p>
         </div>
 
         {/* Alerts */}
@@ -123,7 +125,7 @@ const LoginPage = () => {
           <form onSubmit={handlePhoneSubmit} className="flex flex-col gap-4 text-left">
             <div>
               <label htmlFor="phone" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                Mobile Phone Number
+                {t('mobilePhoneNumber')}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">
@@ -132,7 +134,7 @@ const LoginPage = () => {
                 <input
                   id="phone"
                   type="tel"
-                  placeholder="Enter 10-digit number"
+                  placeholder={t('enter10Digit')}
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value.replace(/[^0-9]/g, ''))}
                   className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary text-sm font-semibold text-slate-800 touch-target"
@@ -149,27 +151,27 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={loadingLocal}
-              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center"
+              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center cursor-pointer"
             >
-              {loadingLocal ? 'Sending...' : 'Request Verification OTP'}
+              {loadingLocal ? t('sending') : t('requestOtp')}
             </button>
           </form>
         ) : (
           <form onSubmit={handleOtpSubmit} className="flex flex-col gap-4 text-left">
             <div className="text-center bg-slate-50 border border-slate-100 p-2.5 rounded-lg text-xs text-slate-600 mb-1">
-              OTP sent to <strong>{phoneNumberAttempt}</strong>
+              {t('otpSentTo')} <strong>{phoneNumberAttempt}</strong>
             </div>
 
             <div>
               <label htmlFor="otp" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                6-Digit Verification Code
+                {t('sixDigitOtp')}
               </label>
               <input
                 id="otp"
                 type="text"
                 pattern="[0-9]*"
                 inputMode="numeric"
-                placeholder="Enter 6-digit OTP code"
+                placeholder={t('enterOtpCode')}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-center tracking-widest text-lg font-bold text-slate-800 touch-target"
@@ -182,16 +184,16 @@ const LoginPage = () => {
             <button
               type="submit"
               disabled={loadingLocal}
-              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center"
+              className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center cursor-pointer"
             >
-              {loadingLocal ? 'Verifying...' : 'Verify OTP & Log In'}
+              {loadingLocal ? t('verifying') : t('verifyOtpLogin')}
             </button>
           </form>
         )}
 
         <div className="flex items-center justify-between text-xs text-slate-400 my-1">
           <hr className="w-1/3 border-slate-200" />
-          <span>OR</span>
+          <span>{t('or')}</span>
           <hr className="w-1/3 border-slate-200" />
         </div>
 
@@ -200,7 +202,7 @@ const LoginPage = () => {
           type="button"
           onClick={handleGoogleLogin}
           disabled={loadingLocal}
-          className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs transition-all touch-target flex items-center justify-center gap-2"
+          className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold py-3 rounded-xl text-xs transition-all touch-target flex items-center justify-center gap-2 cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -220,7 +222,7 @@ const LoginPage = () => {
               d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
             />
           </svg>
-          Continue with Google
+          {t('continueWithGoogle')}
         </button>
       </div>
     </div>

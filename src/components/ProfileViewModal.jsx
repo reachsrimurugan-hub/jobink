@@ -132,6 +132,13 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
             </div>
           </div>
 
+          {/* User Description / About Me */}
+          {profile.description && (
+            <div className="bg-slate-50 border border-slate-200/40 p-3.5 rounded-xl text-xs text-slate-650 italic leading-relaxed">
+              "{profile.description}"
+            </div>
+          )}
+
           {/* Details Section */}
           <div className="space-y-3 border-t border-slate-100 pt-4">
             <div className="flex items-center gap-2 text-xs text-slate-600">

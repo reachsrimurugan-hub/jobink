@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
-import { ShieldCheck, UserCheck, Briefcase, FileText, UserPlus, Upload } from 'lucide-react';
+import { ShieldCheck, UserCheck, Briefcase, Upload } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const RegisterPage = () => {
   const { currentUser, updateProfile } = useAuth();
   const [step, setStep] = useState(1);
+  const { t, i18n } = useTranslation();
   
   // Registration States
   const [role, setRole] = useState('');
@@ -92,6 +94,7 @@ const RegisterPage = () => {
         aadhaarNumber,
         aadhaarPhotoUrl: aadhaarPhoto || 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500', // Default placeholder
         profilePhotoUrl: profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', // Default placeholder
+        language: i18n.language || 'en', // Save current language choice to profile
         createdAt: new Date().toISOString()
       };
 
@@ -120,11 +123,11 @@ const RegisterPage = () => {
         {/* Step Indicator Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <span className="font-extrabold text-lg text-primary tracking-tight">Profile Setup</span>
-            <p className="text-slate-500 text-xs mt-0.5">Please complete the steps to activate your account</p>
+            <span className="font-extrabold text-lg text-primary tracking-tight">{t('profileSetup')}</span>
+            <p className="text-slate-500 text-xs mt-0.5">{t('profileSetupDesc')}</p>
           </div>
           <div className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded">
-            Step {step} of 3
+            {t('step')} {step} {t('of')} 3
           </div>
         </div>
 
@@ -138,21 +141,21 @@ const RegisterPage = () => {
         {step === 1 && (
           <div className="flex flex-col gap-5">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-              Who are you? (Choose your profile type)
+              {t('whoAreYou')}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
                 type="button"
                 onClick={() => handleRoleSelect('worker')}
-                className="border-2 border-slate-200 hover:border-primary p-6 rounded-2xl flex flex-col items-center gap-3 text-center transition-all bg-white hover:bg-primary/5 active:scale-98 touch-target group"
+                className="border-2 border-slate-200 hover:border-primary p-6 rounded-2xl flex flex-col items-center gap-3 text-center transition-all bg-white hover:bg-primary/5 active:scale-98 touch-target group cursor-pointer"
               >
                 <div className="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center text-slate-500 group-hover:text-primary transition-colors">
                   <UserCheck size={24} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 text-sm">I want to Work</h4>
+                  <h4 className="font-bold text-slate-885 text-sm">{t('iWantToWork')}</h4>
                   <p className="text-slate-500 text-xs mt-1 leading-normal">
-                    Apply for part-time local jobs, pick tasks, and get paid directly.
+                    {t('workerDesc')}
                   </p>
                 </div>
               </button>
@@ -160,15 +163,15 @@ const RegisterPage = () => {
               <button
                 type="button"
                 onClick={() => handleRoleSelect('employer')}
-                className="border-2 border-slate-200 hover:border-primary p-6 rounded-2xl flex flex-col items-center gap-3 text-center transition-all bg-white hover:bg-primary/5 active:scale-98 touch-target group"
+                className="border-2 border-slate-200 hover:border-primary p-6 rounded-2xl flex flex-col items-center gap-3 text-center transition-all bg-white hover:bg-primary/5 active:scale-98 touch-target group cursor-pointer"
               >
                 <div className="w-12 h-12 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center text-slate-500 group-hover:text-primary transition-colors">
                   <Briefcase size={24} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 text-sm">I want to Hire</h4>
+                  <h4 className="font-bold text-slate-885 text-sm">{t('iWantToHire')}</h4>
                   <p className="text-slate-500 text-xs mt-1 leading-normal">
-                    Post part-time manual tasks and hire verified helpers in your locality.
+                    {t('employerDesc')}
                   </p>
                 </div>
               </button>
@@ -180,18 +183,18 @@ const RegisterPage = () => {
         {step === 2 && (
           <form onSubmit={handleStep2Submit} className="flex flex-col gap-5">
             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
-              Enter {role === 'worker' ? 'Worker' : 'Employer'} Details
+              {t('enterDetails')} ({role === 'worker' ? t('iWantToWork') : t('iWantToHire')})
             </h3>
 
             {/* Name */}
             <div>
               <label htmlFor="fullName" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                Full Name (As per Aadhaar Card)
+                {t('fullNameAsAadhaar')}
               </label>
               <input
                 id="fullName"
                 type="text"
-                placeholder="Enter full name"
+                placeholder={t('enterFullName')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
@@ -203,7 +206,7 @@ const RegisterPage = () => {
             {role === 'employer' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Profile Type
+                  {t('profileType')}
                 </label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold cursor-pointer">
@@ -215,7 +218,7 @@ const RegisterPage = () => {
                       onChange={() => setBusinessType('Individual')}
                       className="text-primary focus:ring-primary h-4 w-4"
                     />
-                    Individual / Household
+                    {t('individualHousehold')}
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold cursor-pointer">
                     <input
@@ -226,7 +229,7 @@ const RegisterPage = () => {
                       onChange={() => setBusinessType('Business')}
                       className="text-primary focus:ring-primary h-4 w-4"
                     />
-                    Shop / Small Business
+                    {t('shopSmallBusiness')}
                   </label>
                 </div>
               </div>
@@ -236,7 +239,7 @@ const RegisterPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="citySelect" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  City
+                  {t('city')}
                 </label>
                 <select
                   id="citySelect"
@@ -245,10 +248,10 @@ const RegisterPage = () => {
                     setCity(e.target.value);
                     setArea(''); // reset area
                   }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target cursor-pointer"
                   required
                 >
-                  <option value="">Select City</option>
+                  <option value="">{t('selectCity')}</option>
                   {CITIES.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -257,17 +260,17 @@ const RegisterPage = () => {
 
               <div>
                 <label htmlFor="areaSelect" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Area / Neighborhood
+                  {t('areaNeighborhood')}
                 </label>
                 <select
                   id="areaSelect"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target cursor-pointer"
                   required
                   disabled={!city}
                 >
-                  <option value="">Select Area</option>
+                  <option value="">{t('selectArea')}</option>
                   {city && LOCATIONS[city]?.map(a => (
                     <option key={a} value={a}>{a}</option>
                   ))}
@@ -279,7 +282,7 @@ const RegisterPage = () => {
             {role === 'worker' && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Select Your Skills (Check all that apply)
+                  {t('selectSkills')}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-slate-200/80 p-3.5 rounded-xl bg-slate-50/50 no-scrollbar">
                   {ALL_SKILLS.map((skill) => {
@@ -289,7 +292,7 @@ const RegisterPage = () => {
                         key={skill}
                         type="button"
                         onClick={() => handleSkillsToggle(skill)}
-                        className={`text-left p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between transition-colors ${
+                        className={`text-left p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                           isChecked 
                             ? 'bg-primary/5 text-primary border-primary' 
                             : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
@@ -309,15 +312,15 @@ const RegisterPage = () => {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="flex-1 border border-slate-200 hover:bg-slate-50 font-bold py-3.5 rounded-xl text-xs text-slate-700 text-center transition-all touch-target"
+                className="flex-1 border border-slate-200 hover:bg-slate-50 font-bold py-3.5 rounded-xl text-xs text-slate-700 text-center transition-all touch-target cursor-pointer"
               >
-                Back
+                {t('back')}
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target"
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target cursor-pointer"
               >
-                Continue to Identity Setup
+                {t('continueToIdentity')}
               </button>
             </div>
           </form>
@@ -329,14 +332,14 @@ const RegisterPage = () => {
             <div className="bg-amber-50 text-amber-800 text-xs border border-amber-100 p-4 rounded-xl flex items-start gap-2.5 leading-normal">
               <ShieldCheck className="text-amber-600 shrink-0 mt-0.5" size={18} />
               <div>
-                <strong>Aadhaar Verification Required:</strong> To maintain community trust, prevent fraud, and build secure hiring, all users must submit their 12-digit Aadhaar Card details. Admin approves pending profile queues within 24 hours.
+                {t('aadhaarVerifyRequired')}
               </div>
             </div>
 
             {/* Aadhaar Number */}
             <div>
               <label htmlFor="aadhaar" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                12-Digit Aadhaar Number
+                {t('aadhaarNumberLabel')}
               </label>
               <input
                 id="aadhaar"
@@ -354,7 +357,7 @@ const RegisterPage = () => {
             {/* Aadhaar Photo File */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                Upload Aadhaar Card Photo
+                {t('uploadAadhaarPhoto')}
               </label>
               <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
                 <input
@@ -372,8 +375,8 @@ const RegisterPage = () => {
                 ) : (
                   <>
                     <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">Select Image File</span>
-                    <span className="text-[10px] text-slate-400">PNG, JPG formats accepted</span>
+                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
+                    <span className="text-[10px] text-slate-400">{t('pngJpgFormats')}</span>
                   </>
                 )}
               </div>
@@ -382,7 +385,7 @@ const RegisterPage = () => {
             {/* Profile Photo File */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                Upload Profile Photo (Face Picture)
+                {t('uploadProfilePhoto')}
               </label>
               <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
                 <input
@@ -400,8 +403,8 @@ const RegisterPage = () => {
                 ) : (
                   <>
                     <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">Select Image File</span>
-                    <span className="text-[10px] text-slate-400">Your face must be clearly visible</span>
+                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
+                    <span className="text-[10px] text-slate-400">{t('faceClearlyVisible')}</span>
                   </>
                 )}
               </div>
@@ -413,16 +416,16 @@ const RegisterPage = () => {
                 type="button"
                 onClick={() => setStep(2)}
                 disabled={loading}
-                className="flex-1 border border-slate-200 hover:bg-slate-50 font-bold py-3.5 rounded-xl text-xs text-slate-700 text-center transition-all touch-target"
+                className="flex-1 border border-slate-200 hover:bg-slate-50 font-bold py-3.5 rounded-xl text-xs text-slate-700 text-center transition-all touch-target cursor-pointer"
               >
-                Back
+                {t('back')}
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center"
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center cursor-pointer"
               >
-                {loading ? 'Submitting...' : 'Submit Profile for Approval'}
+                {loading ? t('sending') : t('submitProfileForApproval')}
               </button>
             </div>
           </form>

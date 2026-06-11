@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { jobService, applicationService, notificationService, reviewService } from '../services/db';
+import { authService, jobService, applicationService, notificationService, reviewService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
@@ -9,10 +9,13 @@ import JobCard from '../components/JobCard';
 import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
-import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star } from 'lucide-react';
+import Modal from '../components/Modal';
+import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const WorkerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
+  const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
   const [jobs, setJobs] = useState([]);
@@ -41,6 +44,161 @@ const WorkerDashboard = () => {
   
   // Availability toggle loading helper
   const [availLoading, setAvailLoading] = useState(false);
+
+  // Profile edit states
+  const [editPhoto, setEditPhoto] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+
+  // Phone Change States
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneRequest, setPhoneRequest] = useState(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [phoneSuccess, setPhoneSuccess] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [changeOtp, setChangeOtp] = useState('');
+
+  // Sync profile details state from currentUser
+  useEffect(() => {
+    if (currentUser) {
+      setEditPhoto(currentUser.profilePhotoUrl || '');
+      setEditDescription(currentUser.description || '');
+    }
+  }, [currentUser]);
+
+  const loadPhoneChangeRequest = async () => {
+    try {
+      const req = await authService.getPhoneChangeRequestForUser(currentUser.uid);
+      setPhoneRequest(req);
+    } catch (err) {
+      console.error("Failed to load phone change request:", err);
+    }
+  };
+
+  const handleFileChange = (e, setFileState) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFileState(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileSuccess('');
+    setProfileSaving(true);
+    try {
+      await updateProfile({
+        profilePhotoUrl: editPhoto || currentUser.profilePhotoUrl,
+        description: editDescription
+      });
+      setProfileSuccess('Profile updated successfully!');
+      setProfileSaving(false);
+    } catch (err) {
+      console.error(err);
+      setProfileError('Failed to save profile. Please try again.');
+      setProfileSaving(false);
+    }
+  };
+
+  const handleRequestPhoneChange = async (e) => {
+    e.preventDefault();
+    setPhoneError('');
+    setPhoneSuccess('');
+    
+    const sanitized = newPhone.replace(/[^0-9]/g, '');
+    if (sanitized.length !== 10) {
+      setPhoneError('Please enter a valid 10-digit phone number.');
+      return;
+    }
+    
+    const formattedPhone = `+91${sanitized}`;
+    if (formattedPhone === currentUser.phone) {
+      setPhoneError('New phone number cannot be the same as your current phone number.');
+      return;
+    }
+    
+    setPhoneLoading(true);
+    try {
+      const req = await authService.requestPhoneChange(
+        currentUser.uid,
+        currentUser.phone || '',
+        formattedPhone,
+        currentUser.name || 'User'
+      );
+      setPhoneRequest(req);
+      setPhoneSuccess('Change request submitted to Admin successfully.');
+      setPhoneLoading(false);
+    } catch (err) {
+      console.error(err);
+      setPhoneError('Failed to request phone change.');
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleSendPhoneChangeOTP = () => {
+    setPhoneLoading(true);
+    setPhoneError('');
+    setPhoneSuccess('');
+    setTimeout(() => {
+      setOtpSent(true);
+      setPhoneSuccess('OTP sent to ' + phoneRequest.newPhone);
+      setPhoneLoading(false);
+    }, 800);
+  };
+
+  const handleVerifyPhoneChangeOTP = async (e) => {
+    e.preventDefault();
+    setPhoneError('');
+    setPhoneSuccess('');
+    
+    if (changeOtp !== '123456') {
+      setPhoneError('Invalid OTP code. Please enter the correct OTP (123456 for testing).');
+      return;
+    }
+    
+    setPhoneLoading(true);
+    try {
+      await authService.completePhoneChange(currentUser.uid, phoneRequest.uid, phoneRequest.newPhone);
+      setPhoneSuccess('Phone number updated successfully!');
+      setNewPhone('');
+      setOtpSent(false);
+      setChangeOtp('');
+      
+      // Reload profile
+      await reloadProfile();
+      await loadPhoneChangeRequest();
+      setPhoneLoading(false);
+    } catch (err) {
+      console.error(err);
+      setPhoneError('Failed to update phone number.');
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleResetPhoneRequest = async () => {
+    setPhoneLoading(true);
+    try {
+      await authService.deletePhoneChangeRequest(currentUser.uid);
+      setPhoneRequest(null);
+      setNewPhone('');
+      setOtpSent(false);
+      setChangeOtp('');
+      setPhoneLoading(false);
+    } catch (err) {
+      console.error(err);
+      setPhoneError('Failed to reset request.');
+      setPhoneLoading(false);
+    }
+  };
 
   // Unread notifications count
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -100,6 +258,7 @@ const WorkerDashboard = () => {
     } else if (activeTab === 'profile') {
       loadReviews();
       reloadProfile(); // Reload user stats (like verification and rating)
+      loadPhoneChangeRequest();
     }
   }, [activeTab, filterCity, filterArea]);
 
@@ -161,11 +320,11 @@ const WorkerDashboard = () => {
               {/* Availability Panel */}
               <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
                 <div className="text-left">
-                  <h3 className="font-bold text-slate-800 text-sm">My Availability</h3>
+                  <h3 className="font-bold text-slate-800 text-sm">{t('myAvailability')}</h3>
                   <p className="text-slate-500 text-xs mt-0.5">
                     {currentUser.availability 
-                      ? "🟢 Available for work. Employers can select you." 
-                      : "🔴 Currently working/busy. Hidden from auto-select."}
+                      ? t('availableDesc')
+                      : t('busyDesc')}
                   </p>
                 </div>
                 <button
@@ -178,7 +337,7 @@ const WorkerDashboard = () => {
                       : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
                   }`}
                 >
-                  {availLoading ? 'Updating...' : currentUser.availability ? 'Available' : 'Busy'}
+                  {availLoading ? t('updating') : currentUser.availability ? t('available') : t('busy')}
                 </button>
               </div>
 
@@ -186,11 +345,11 @@ const WorkerDashboard = () => {
               <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm text-left flex flex-col gap-3">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                   <MapPin size={16} className="text-primary" />
-                  Filter Hyperlocal Jobs
+                  {t('filterHyperlocalJobs')}
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="feedCity" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">City</label>
+                    <label htmlFor="feedCity" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">{t('city')}</label>
                     <select
                       id="feedCity"
                       value={filterCity}
@@ -198,24 +357,24 @@ const WorkerDashboard = () => {
                         setFilterCity(e.target.value);
                         setFilterArea('');
                       }}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target cursor-pointer"
                     >
-                      <option value="">All Cities</option>
+                      <option value="">{t('allCities')}</option>
                       {CITIES.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label htmlFor="feedArea" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Area</label>
+                    <label htmlFor="feedArea" className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">{t('area')}</label>
                     <select
                       id="feedArea"
                       value={filterArea}
                       onChange={(e) => setFilterArea(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 touch-target cursor-pointer"
                       disabled={!filterCity}
                     >
-                      <option value="">All Areas</option>
+                      <option value="">{t('allAreas')}</option>
                       {filterCity && LOCATIONS[filterCity]?.map(a => (
                         <option key={a} value={a}>{a}</option>
                       ))}
@@ -228,14 +387,14 @@ const WorkerDashboard = () => {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                    Jobs in {filterArea || filterCity || "All Locations"} ({jobs.length})
+                    {t('jobsIn')} {filterArea || filterCity || t('allLocations')} ({jobs.length})
                   </h2>
                   <button 
                     type="button" 
                     onClick={loadJobs} 
-                    className="text-xs font-bold text-primary hover:underline touch-target"
+                    className="text-xs font-bold text-primary hover:underline touch-target cursor-pointer"
                   >
-                    Refresh Feed
+                    {t('refreshFeed')}
                   </button>
                 </div>
 
@@ -255,8 +414,8 @@ const WorkerDashboard = () => {
                 ) : jobs.length === 0 ? (
                   <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
                     <Briefcase size={36} className="text-slate-300" />
-                    <p className="text-sm font-medium text-slate-500">No active jobs found in this area.</p>
-                    <p className="text-xs text-slate-400">Try changing your location filter above.</p>
+                    <p className="text-sm font-medium text-slate-500">{t('noActiveJobsFound')}</p>
+                    <p className="text-xs text-slate-400">{t('changeFilterDesc')}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -287,19 +446,19 @@ const WorkerDashboard = () => {
           {activeTab === 'applications' && (
             <div className="flex flex-col gap-4">
               <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 text-left">
-                My Applications ({myApplications.length})
+                {t('myApplications')} ({myApplications.length})
               </h2>
 
               {myApplications.length === 0 ? (
                 <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
                   <Briefcase size={36} className="text-slate-300" />
-                  <p className="text-sm font-medium text-slate-500">You haven't applied to any jobs yet.</p>
+                  <p className="text-sm font-medium text-slate-500">{t('youHaventApplied')}</p>
                   <button
                     type="button"
                     onClick={() => setActiveTab('home')}
-                    className="text-xs font-bold text-white bg-primary px-4 py-2 rounded-lg touch-target"
+                    className="text-xs font-bold text-white bg-primary px-4 py-2 rounded-lg touch-target cursor-pointer"
                   >
-                    Browse Jobs Feed
+                    {t('browseJobsFeed')}
                   </button>
                 </div>
               ) : (
@@ -321,27 +480,27 @@ const WorkerDashboard = () => {
 
                       <div className="text-xs text-slate-600 space-y-1">
                         <div className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {app.jobLocation}</div>
-                        <div className="flex items-center gap-1.5"><Clock size={14} className="text-slate-400" /> Applied: {new Date(app.appliedAt).toLocaleDateString('en-IN')}</div>
+                        <div className="flex items-center gap-1.5"><Clock size={14} className="text-slate-400" /> {t('applied')}: {new Date(app.appliedAt).toLocaleDateString('en-IN')}</div>
                       </div>
 
                       {/* Selected actions (Active Jobs) */}
                       {app.status === 'selected' && app.jobStatus !== 'completed' && (
                         <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
-                          <span className="text-[11px] font-bold text-green-600 block">✓ You have been selected! Contact the employer:</span>
+                          <span className="text-[11px] font-bold text-green-600 block">✓ {t('youHaveBeenSelected')}</span>
                           <div className="flex gap-2">
                             <a 
                               href={`tel:${app.workerPhone}`} // Fallback or employer phone
-                              className="flex-1 text-center bg-slate-100 border border-slate-200 text-slate-700 font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target"
+                              className="flex-1 text-center bg-slate-100 border border-slate-200 text-slate-700 font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
                             >
-                              Call Employer
+                              {t('callEmployer')}
                             </a>
                             <a 
                               href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello, I am ready to work for "${app.jobTitle}"!`}
                               target="_blank"
                               rel="noreferrer"
-                              className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target"
+                              className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
                             >
-                              WhatsApp
+                              {t('whatsapp')}
                             </a>
                           </div>
                         </div>
@@ -350,14 +509,14 @@ const WorkerDashboard = () => {
                       {/* Selected actions (Completed Jobs) */}
                       {app.status === 'selected' && app.jobStatus === 'completed' && (
                         <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
-                          <span className="text-[11px] font-bold text-slate-500 block">✓ Work Completed! Feedback is active:</span>
+                          <span className="text-[11px] font-bold text-slate-500 block">{t('workCompletedFeedback')}</span>
                           <button
                             type="button"
                             onClick={() => handleViewEmployerProfile(app.employerId)}
-                            className="w-full text-center bg-primary/10 hover:bg-primary/20 text-primary font-bold py-2 rounded-lg text-xs transition-colors touch-target flex items-center justify-center gap-1.5"
+                            className="w-full text-center bg-primary/10 hover:bg-primary/20 text-primary font-bold py-2 rounded-lg text-xs transition-colors touch-target flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             <Star size={14} className="fill-primary" />
-                            Rate & Review Employer
+                            {t('rateReviewEmployer')}
                           </button>
                         </div>
                       )}
@@ -373,15 +532,15 @@ const WorkerDashboard = () => {
             <div className="flex flex-col gap-4 text-left">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                  In-App Alerts ({notifications.length})
+                  {t('inAppAlerts')} ({notifications.length})
                 </h2>
                 {unreadCount > 0 && (
                   <button
                     type="button"
                     onClick={handleMarkAllRead}
-                    className="text-xs font-bold text-primary hover:underline touch-target"
+                    className="text-xs font-bold text-primary hover:underline touch-target cursor-pointer"
                   >
-                    Mark all as read
+                    {t('markAllRead')}
                   </button>
                 )}
               </div>
@@ -389,7 +548,7 @@ const WorkerDashboard = () => {
               {notifications.length === 0 ? (
                 <div className="bg-white border border-slate-200 border-dashed p-10 rounded-xl text-center flex flex-col items-center gap-3">
                   <Bell size={36} className="text-slate-300" />
-                  <p className="text-sm font-medium text-slate-500">All caught up! No notifications.</p>
+                  <p className="text-sm font-medium text-slate-500">{t('allCaughtUp')}</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
@@ -412,15 +571,34 @@ const WorkerDashboard = () => {
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                 <img 
                   src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
-                  alt={currentUser.name || 'Worker'} 
+                  alt={currentUser.name || t('worker')} 
                   className="w-20 h-20 rounded-full object-cover border border-slate-200"
                 />
                 <div className="flex-1 text-center sm:text-left">
-                  <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
+                  <div className="flex justify-center sm:justify-start items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileSuccess('');
+                        setProfileError('');
+                        setIsEditProfileOpen(true);
+                      }}
+                      className="text-[10px] font-bold text-primary hover:text-primary-dark flex items-center gap-1 bg-primary/5 hover:bg-primary/10 border border-primary/15 px-2 py-0.5 rounded transition-colors touch-target cursor-pointer"
+                    >
+                      <Edit3 size={11} />
+                      {t('editProfile')}
+                    </button>
+                  </div>
                   <span className="text-xs text-slate-500 font-mono block mt-1">{currentUser.phone}</span>
-                  <div className="flex justify-center sm:justify-start items-center gap-2 mt-2">
+                  {currentUser.description && (
+                    <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed">
+                      "{currentUser.description}"
+                    </p>
+                  )}
+                  <div className="flex justify-center sm:justify-start items-center gap-2 mt-2.5">
                     <RatingStars rating={currentUser.rating} size={15} />
-                    <span className="text-xs text-slate-400 font-medium">({currentUser.ratingCount || 0} reviews)</span>
+                    <span className="text-xs text-slate-400 font-medium">{t('reviewsCount', { count: currentUser.ratingCount || 0 })}</span>
                   </div>
                 </div>
               </div>
@@ -428,7 +606,7 @@ const WorkerDashboard = () => {
               {/* Skills */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 mb-3">
-                  My Skills
+                  {t('mySkills')}
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {currentUser.skills?.map(skill => (
@@ -442,11 +620,11 @@ const WorkerDashboard = () => {
               {/* Reviews Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 mb-3">
-                  Employer Feedback ({reviews.length})
+                  {t('employerFeedback')} ({reviews.length})
                 </h4>
 
                 {reviews.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">No reviews received yet. Completed jobs will show feedback here.</p>
+                  <p className="text-xs text-slate-500 text-center py-4">{t('noReviewsReceived')}</p>
                 ) : (
                   <div className="flex flex-col gap-4">
                     {reviews.map((rev) => (
@@ -483,6 +661,230 @@ const WorkerDashboard = () => {
         currentUserName={currentUser.name}
         canWriteReview={canReviewEmployer}
       />
+
+      <Modal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        title={t('editProfileSettings')}
+      >
+        <div className="flex flex-col gap-5 text-left">
+          {/* Edit Profile Details Form */}
+          <div className="flex flex-col gap-4">
+            {profileError && (
+              <div className="bg-red-50 text-red-700 text-xs font-semibold p-3 rounded-lg border border-red-100 mb-1">
+                {profileError}
+              </div>
+            )}
+            {profileSuccess && (
+              <div className="bg-green-50 text-green-700 text-xs font-semibold p-3 rounded-lg border border-green-100 mb-1">
+                {profileSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
+              {/* Blocked Name Input */}
+              <div>
+                <label htmlFor="disabledName" className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase">
+                  {t('fullNameIdentityLock')}
+                </label>
+                <div>
+                  <input
+                    id="disabledName"
+                    type="text"
+                    value={currentUser.name}
+                    disabled
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-450 cursor-not-allowed"
+                  />
+                  <span className="text-[9px] text-red-500 font-bold mt-1 block">
+                    {t('blockedNameWarning')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Profile Photo File Upload */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
+                  {t('updateProfilePhoto')}
+                </label>
+                <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e, setEditPhoto)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  {editPhoto ? (
+                    <div className="text-center w-full">
+                      <img src={editPhoto} alt="Profile preview" className="w-12 h-12 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
+                      <span className="text-[10px] text-green-600 font-semibold block">{"✓ " + t('selected')}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Profile Description */}
+              <div>
+                <label htmlFor="description" className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
+                  {t('profileBio')}
+                </label>
+                <textarea
+                  id="description"
+                  rows={3}
+                  placeholder={t('bioPlaceholder')}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-primary"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={profileSaving}
+                className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer"
+              >
+                {profileSaving ? t('savingChanges') : t('saveProfileDetails')}
+              </button>
+            </form>
+          </div>
+
+          {/* Update Phone Number Card */}
+          <div className="border-t border-slate-100 pt-5 flex flex-col gap-4">
+            <h4 className="font-bold text-slate-850 text-xs uppercase tracking-wider flex items-center gap-1.5">
+              {"📞 " + t('updateMobileNumber')}
+            </h4>
+            
+            {phoneError && (
+              <div className="bg-red-50 text-red-700 text-xs font-semibold p-3 rounded-lg border border-red-100">
+                {phoneError}
+              </div>
+            )}
+            {phoneSuccess && (
+              <div className="bg-green-50 text-green-700 text-xs font-semibold p-3 rounded-lg border border-green-100">
+                {phoneSuccess}
+              </div>
+            )}
+
+            {/* None state (no active change request) */}
+            {!phoneRequest && (
+              <form onSubmit={handleRequestPhoneChange} className="flex flex-col gap-3">
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  {t('requestPhoneChangeDesc')}
+                </p>
+                <div>
+                  <label htmlFor="newPhoneInput" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">{t('newMobileNumber')}</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
+                    <input
+                      id="newPhoneInput"
+                      type="tel"
+                      placeholder={t('enter10Digit')}
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                      maxLength={10}
+                      className="w-full pl-12 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                      required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={phoneLoading}
+                  className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
+                >
+                  {phoneLoading ? t('sending') : t('requestUpdateInfo')}
+                </button>
+              </form>
+            )}
+
+            {/* Pending Approval state */}
+            {phoneRequest && phoneRequest.status === 'pending' && (
+              <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold">
+                  <span>{t('requestPendingAdmin')}</span>
+                </div>
+                <p className="text-xs text-slate-655">
+                  {t('requestedUpdateTo')} <strong>{phoneRequest.newPhone}</strong>.
+                </p>
+                <span className="text-[10px] text-slate-400">
+                  {t('submitted')}: {new Date(phoneRequest.createdAt).toLocaleDateString('en-IN')}
+                </span>
+              </div>
+            )}
+
+            {/* Approved state (OTP entry) */}
+            {phoneRequest && phoneRequest.status === 'approved' && (
+              <div className="bg-green-50/50 border border-green-200 p-4 rounded-xl flex flex-col gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-green-700 font-bold">
+                  <span>{t('phoneChangeApproved')}</span>
+                </div>
+                <p className="text-xs text-slate-655">
+                  {t('adminApprovedPhoneChange', { phone: phoneRequest.newPhone })}
+                </p>
+                
+                {!otpSent ? (
+                  <button
+                    type="button"
+                    onClick={handleSendPhoneChangeOTP}
+                    disabled={phoneLoading}
+                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
+                  >
+                    {phoneLoading ? t('sending') : t('sendOtpToNew')}
+                  </button>
+                ) : (
+                  <form onSubmit={handleVerifyPhoneChangeOTP} className="flex flex-col gap-3 border-t border-green-100 pt-3">
+                    <div>
+                      <label htmlFor="phoneChangeOtp" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                        {t('sixDigitVerification')}
+                      </label>
+                      <input
+                        id="phoneChangeOtp"
+                        type="text"
+                        placeholder={t('enterOtpCode')}
+                        value={changeOtp}
+                        onChange={(e) => setChangeOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-center font-bold tracking-widest text-slate-800"
+                        maxLength={6}
+                        required
+                      />
+                      <span className="text-[10px] text-slate-450 block mt-1">
+                        {t('testHelperOtp')}
+                      </span>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={phoneLoading}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
+                    >
+                      {phoneLoading ? t('verifying') : t('verifyOtpComplete')}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* Rejected state */}
+            {phoneRequest && phoneRequest.status === 'rejected' && (
+              <div className="bg-red-50/50 border border-red-200 p-4 rounded-xl flex flex-col gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-red-700 font-bold">
+                  <span>{t('requestRejectedAdmin')}</span>
+                </div>
+                <p className="text-xs text-slate-655">
+                  {t('adminRejectedPhoneChange', { phone: phoneRequest.newPhone })}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResetPhoneRequest}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-xs transition-colors w-full cursor-pointer"
+                >
+                  {t('requestAgain')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

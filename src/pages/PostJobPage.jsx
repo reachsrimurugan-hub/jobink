@@ -5,9 +5,11 @@ import { jobService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
 import { ArrowLeft, CheckCircle, ShieldAlert, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const PostJobPage = () => {
   const { currentUser } = useAuth();
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [payment, setPayment] = useState('');
@@ -26,19 +28,19 @@ const PostJobPage = () => {
     setError('');
 
     if (!title.trim() || !description.trim()) {
-      setError('Please fill in the title and description.');
+      setError(t('pleaseFillTitleDesc'));
       return;
     }
     if (Number(payment) <= 0) {
-      setError('Payment must be a positive amount.');
+      setError(t('paymentPositiveAmount'));
       return;
     }
     if (!city || !area) {
-      setError('Please select both city and area.');
+      setError(t('pleaseSelectCityArea'));
       return;
     }
     if (Number(workersNeeded) <= 0) {
-      setError('At least 1 worker is required.');
+      setError(t('atLeastOneWorker'));
       return;
     }
 
@@ -64,7 +66,7 @@ const PostJobPage = () => {
       navigate('/dashboard');
     } catch (err) {
       console.error(err);
-      setError('Failed to create job posting. Please try again.');
+      setError(t('failedCreateJob'));
       setLoading(false);
     }
   };
@@ -81,14 +83,14 @@ const PostJobPage = () => {
           className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 mb-6 touch-target"
         >
           <ArrowLeft size={16} />
-          Back to Dashboard
+          {t('backToDashboard')}
         </button>
 
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 sm:p-8 text-left">
           {/* Header */}
           <div className="border-b border-slate-100 pb-4 mb-6">
-            <h2 className="font-extrabold text-slate-800 text-lg">Post Helper Requirement</h2>
-            <p className="text-slate-500 text-xs mt-1">Specify task details, location, and payment to hire helpers</p>
+            <h2 className="font-extrabold text-slate-800 text-lg">{t('postHelperRequirement')}</h2>
+            <p className="text-slate-500 text-xs mt-1">{t('postJobSubtitle')}</p>
           </div>
 
           {error && (
@@ -103,12 +105,12 @@ const PostJobPage = () => {
             {/* Job Title */}
             <div>
               <label htmlFor="jobTitle" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                Job Title / Requirement
+                {t('jobTitleRequirement')}
               </label>
               <input
                 id="jobTitle"
                 type="text"
-                placeholder="e.g. Packing Helper, AC Servicing Assistant"
+                placeholder={t('jobTitlePlaceholder')}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-850 touch-target"
@@ -120,12 +122,12 @@ const PostJobPage = () => {
             {/* Description */}
             <div>
               <label htmlFor="jobDesc" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                Describe the Manual Work
+                {t('describeManualWork')}
               </label>
               <textarea
                 id="jobDesc"
                 rows={4}
-                placeholder="Describe responsibilities, size of boxes, floor number, details about tools needed, etc."
+                placeholder={t('describeWorkPlaceholder')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-medium text-slate-700"
@@ -138,12 +140,12 @@ const PostJobPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="payAmt" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Payment (INR)
+                  {t('paymentInr')}
                 </label>
                 <input
                   id="payAmt"
                   type="number"
-                  placeholder="e.g. 500"
+                  placeholder={t('payAmtPlaceholder')}
                   value={payment}
                   onChange={(e) => setPayment(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-bold text-slate-800 touch-target"
@@ -155,7 +157,7 @@ const PostJobPage = () => {
 
               <div>
                 <label htmlFor="payRate" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Payment Rate
+                  {t('paymentRate')}
                 </label>
                 <select
                   id="payRate"
@@ -165,8 +167,8 @@ const PostJobPage = () => {
                   required
                   disabled={loading}
                 >
-                  <option value="per day">Per Day</option>
-                  <option value="fixed">Fixed (One-Time)</option>
+                  <option value="per day">{t('perDay')}</option>
+                  <option value="fixed">{t('fixedOneTime')}</option>
                 </select>
               </div>
             </div>
@@ -175,7 +177,7 @@ const PostJobPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="jobCity" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  City
+                  {t('city')}
                 </label>
                 <select
                   id="jobCity"
@@ -188,7 +190,7 @@ const PostJobPage = () => {
                   required
                   disabled={loading}
                 >
-                  <option value="">Select City</option>
+                  <option value="">{t('selectCity')}</option>
                   {CITIES.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -197,17 +199,17 @@ const PostJobPage = () => {
 
               <div>
                 <label htmlFor="jobArea" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Area / Neighborhood
+                  {t('areaNeighborhood')}
                 </label>
                 <select
                   id="jobArea"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-850 touch-target"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-855 touch-target"
                   required
                   disabled={loading || !city}
                 >
-                  <option value="">Select Area</option>
+                  <option value="">{t('selectArea')}</option>
                   {city && LOCATIONS[city]?.map(a => (
                     <option key={a} value={a}>{a}</option>
                   ))}
@@ -219,12 +221,12 @@ const PostJobPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="jobHours" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Working Hours
+                  {t('workingHours')}
                 </label>
                 <input
                   id="jobHours"
                   type="text"
-                  placeholder="e.g. 9 AM - 6 PM, 4 Hours total"
+                  placeholder={t('workingHoursPlaceholder')}
                   value={workingHours}
                   onChange={(e) => setWorkingHours(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
@@ -235,12 +237,12 @@ const PostJobPage = () => {
 
               <div>
                 <label htmlFor="workersNeed" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  Workers Needed
+                  {t('workersNeeded')}
                 </label>
                 <input
                   id="workersNeed"
                   type="number"
-                  placeholder="e.g. 2"
+                  placeholder={t('workersNeededPlaceholder')}
                   value={workersNeeded}
                   onChange={(e) => setWorkersNeeded(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-bold text-slate-800 touch-target"
@@ -258,10 +260,10 @@ const PostJobPage = () => {
               className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center mt-3 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed border border-transparent"
             >
               {loading 
-                ? 'Creating Post...' 
+                ? t('creatingPost') 
                 : !currentUser.verified 
-                  ? 'Verification Required to Post Jobs' 
-                  : 'Post Job Listing'}
+                  ? t('verificationRequiredToPost') 
+                  : t('postJobListing')}
             </button>
           </form>
         </div>

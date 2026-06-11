@@ -1,17 +1,22 @@
 import React from 'react';
-import { Home, Briefcase, Bell, User, PlusCircle } from 'lucide-react';
+import { Home, Briefcase, Bell, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../contexts/AuthContext';
 
 const BottomNav = ({ role, activeTab, setActiveTab, unreadCount = 0 }) => {
+  const { t } = useTranslation();
+  const { startTransition, endTransition } = useAuth();
+  
   const tabs = role === 'worker' ? [
-    { id: 'home', label: 'Feed', icon: Home },
-    { id: 'applications', label: 'Applied', icon: Briefcase },
-    { id: 'notifications', label: 'Alerts', icon: Bell, badge: unreadCount },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'home', label: t('feed'), icon: Home },
+    { id: 'applications', label: t('applied'), icon: Briefcase },
+    { id: 'notifications', label: t('alerts'), icon: Bell, badge: unreadCount },
+    { id: 'profile', label: t('profile'), icon: User }
   ] : [
-    { id: 'home', label: 'Overview', icon: Home },
-    { id: 'jobs', label: 'My Posts', icon: Briefcase },
-    { id: 'notifications', label: 'Alerts', icon: Bell, badge: unreadCount },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'home', label: t('overview'), icon: Home },
+    { id: 'jobs', label: t('myPosts'), icon: Briefcase },
+    { id: 'notifications', label: t('alerts'), icon: Bell, badge: unreadCount },
+    { id: 'profile', label: t('profile'), icon: User }
   ];
 
   return (
@@ -24,7 +29,14 @@ const BottomNav = ({ role, activeTab, setActiveTab, unreadCount = 0 }) => {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              if (activeTab === tab.id) return;
+              startTransition();
+              setActiveTab(tab.id);
+              setTimeout(() => {
+                endTransition();
+              }, 450);
+            }}
             className="flex flex-col items-center justify-center flex-1 py-1 px-2 relative transition-colors"
           >
             <div className="relative flex items-center justify-center text-slate-400">

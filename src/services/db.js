@@ -117,9 +117,12 @@ export const authService = {
     
     const payload = {
       ...profileData,
-      verified: profileData.verificationStatus === 'verified',
       updatedAt: new Date().toISOString()
     };
+    
+    if (profileData.verificationStatus !== undefined) {
+      payload.verified = profileData.verificationStatus === 'verified';
+    }
     
     // Split city and area for query parsing
     if (profileData.location) {
@@ -130,11 +133,18 @@ export const authService = {
 
     if (userSnap.exists()) {
       await updateDoc(userRef, payload);
+      return { uid, ...userSnap.data(), ...payload };
     } else {
       payload.createdAt = new Date().toISOString();
+      if (!payload.language) {
+        payload.language = 'en';
+      }
+      if (payload.verified === undefined) {
+        payload.verified = false;
+      }
       await setDoc(userRef, payload);
+      return { uid, ...payload };
     }
-    return { uid, ...payload };
   },
 
   // Admin Queue for identity verification
@@ -166,6 +176,90 @@ export const authService = {
         ? "Your identity has been verified. You can now access all features of WorkLink."
         : "Your identity proof was rejected by the admin. Please upload a clear photo of your Aadhaar card."
     );
+    return true;
+  },
+
+  // Request phone number change (creates a request document in Firestore)
+  requestPhoneChange: async (uid, oldPhone, newPhone, userName) => {
+    const requestRef = doc(db, 'phoneChangeRequests', uid);
+    const payload = {
+      uid,
+      userName,
+      oldPhone,
+      newPhone,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    await setDoc(requestRef, payload);
+
+    // Notify all admins via standard notification channel
+    await notificationService.addNotification(
+      'admin',
+      'Phone Change Request',
+      `${userName} has requested to change their phone number from ${oldPhone} to ${newPhone}.`
+    );
+    return payload;
+  },
+
+  // Fetch active phone change request for a specific user
+  getPhoneChangeRequestForUser: async (uid) => {
+    const docSnap = await getDoc(doc(db, 'phoneChangeRequests', uid));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+  },
+
+  // Get all pending phone change requests for Admin Dashboard
+  getPendingPhoneChanges: async () => {
+    const q = query(
+      collection(db, 'phoneChangeRequests'),
+      where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  // Update phone change status (Admin Approves / Rejects)
+  updatePhoneChangeStatus: async (requestId, status) => {
+    const requestRef = doc(db, 'phoneChangeRequests', requestId);
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists()) return false;
+    
+    const requestData = requestSnap.data();
+    await updateDoc(requestRef, { status });
+
+    // Notify the user in real-time
+    await notificationService.addNotification(
+      requestData.uid,
+      status === 'approved' ? 'Phone Change Request Approved' : 'Phone Change Request Rejected',
+      status === 'approved'
+        ? `Your request to change your number to ${requestData.newPhone} was approved. Verify with OTP to complete the change.`
+        : `Your request to change your number to ${requestData.newPhone} was rejected by the admin.`
+    );
+    return true;
+  },
+
+  // Complete phone change process (User verifies OTP and applies the new number)
+  completePhoneChange: async (uid, requestId, newPhone) => {
+    // 1. Update user profile phone number
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, { phone: newPhone });
+    
+    // 2. Mark request as completed
+    const requestRef = doc(db, 'phoneChangeRequests', requestId);
+    await updateDoc(requestRef, { status: 'completed' });
+
+    // 3. Notify the user
+    await notificationService.addNotification(
+      uid,
+      'Phone Number Updated',
+      `Your mobile number has been successfully updated to ${newPhone}.`
+    );
+    return true;
+  },
+
+  // Reset/Delete phone change request
+  deletePhoneChangeRequest: async (uid) => {
+    await deleteDoc(doc(db, 'phoneChangeRequests', uid));
     return true;
   }
 };

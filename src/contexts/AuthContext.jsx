@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/db';
+import i18n from '../i18n/i18n';
 
 const AuthContext = createContext(null);
 
@@ -16,6 +17,10 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [phoneNumberAttempt, setPhoneNumberAttempt] = useState('');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const startTransition = () => setIsTransitioning(true);
+  const endTransition = () => setIsTransitioning(false);
 
   useEffect(() => {
     // Listen for authentication changes (both Firebase & Mock)
@@ -30,6 +35,13 @@ export const AuthProvider = ({ children }) => {
       }
     };
   }, []);
+
+  // Sync language with currentUser on load
+  useEffect(() => {
+    if (currentUser && currentUser.language && currentUser.language !== i18n.language) {
+      i18n.changeLanguage(currentUser.language);
+    }
+  }, [currentUser]);
 
   const loginWithPhone = async (phoneNumber, elementId) => {
     try {
@@ -104,6 +116,9 @@ export const AuthProvider = ({ children }) => {
     currentUser,
     loading,
     phoneNumberAttempt,
+    isTransitioning,
+    startTransition,
+    endTransition,
     loginWithPhone,
     confirmOTP,
     loginWithGoogle,

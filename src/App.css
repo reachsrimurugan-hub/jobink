@@ -1,1 +1,42 @@
 /* App-specific custom styles are handled via Tailwind CSS utility classes. */
+
+/* Sleek Top Progress Bar Loader */
+.top-loader-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3.5px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6);
+  background-size: 200% 100%;
+  z-index: 9999;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), 0 0 6px rgba(139, 92, 246, 0.4);
+  animation: loading-bar 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite, shimmers 2s linear infinite;
+}
+
+@keyframes loading-bar {
+  0% {
+    width: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    width: 65%;
+    opacity: 1;
+  }
+  85% {
+    width: 92%;
+    opacity: 1;
+  }
+  100% {
+    width: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes shimmers {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}

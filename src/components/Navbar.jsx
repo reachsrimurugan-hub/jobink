@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, ShieldAlert, BadgeCheck } from 'lucide-react';
 import { notificationService } from '../services/db';
+import { useTranslation } from 'react-i18next';
 
 const Navbar = ({ activeTab, setActiveTab }) => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, updateProfile, startTransition, endTransition } = useAuth();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     if (!currentUser || currentUser.role === 'admin') return;
@@ -22,31 +24,58 @@ const Navbar = ({ activeTab, setActiveTab }) => {
 
   const handleLogout = async () => {
     try {
+      startTransition();
       await logout();
       navigate('/login');
+      setTimeout(() => {
+        endTransition();
+      }, 500);
     } catch (err) {
       console.error('Logout error', err);
+      endTransition();
     }
   };
 
+  const handleLanguageChange = async (e) => {
+    const newLang = e.target.value;
+    startTransition();
+    i18n.changeLanguage(newLang);
+    localStorage.setItem('i18nextLng', newLang);
+    if (currentUser) {
+      try {
+        await updateProfile({ language: newLang });
+      } catch (err) {
+        console.error('Failed to sync language to profile:', err);
+      }
+    }
+    setTimeout(() => {
+      endTransition();
+    }, 600);
+  };
+
   const tabs = currentUser?.role === 'worker' ? [
-    { id: 'home', label: 'Feed' },
-    { id: 'applications', label: 'Applied' },
-    { id: 'notifications', label: 'Alerts' },
-    { id: 'profile', label: 'Profile' }
+    { id: 'home', label: t('feed') },
+    { id: 'applications', label: t('applied') },
+    { id: 'notifications', label: t('alerts') },
+    { id: 'profile', label: t('profile') }
   ] : currentUser?.role === 'employer' ? [
-    { id: 'home', label: 'Overview' },
-    { id: 'jobs', label: 'My Posts' },
-    { id: 'notifications', label: 'Alerts' },
-    { id: 'profile', label: 'Profile' }
+    { id: 'home', label: t('overview') },
+    { id: 'jobs', label: t('myPosts') },
+    { id: 'notifications', label: t('alerts') },
+    { id: 'profile', label: t('profile') }
   ] : [];
 
   const handleTabClick = (tabId) => {
+    if (activeTab === tabId) return;
+    startTransition();
     if (setActiveTab) {
       setActiveTab(tabId);
     } else {
       navigate('/dashboard', { state: { defaultTab: tabId } });
     }
+    setTimeout(() => {
+      endTransition();
+    }, 450);
   };
 
   return (
@@ -59,11 +88,11 @@ const Navbar = ({ activeTab, setActiveTab }) => {
           onClick={() => handleTabClick('home')}
         >
           <span className="font-bold text-xl tracking-tight text-primary flex items-center">
-            WorkLink
+            Jobink
           </span>
           {currentUser?.role && (
             <span className="text-[10px] uppercase font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded tracking-wide border border-slate-200 hidden xs:inline">
-              {currentUser.role === 'admin' ? 'Admin' : currentUser.role}
+              {currentUser.role === 'admin' ? 'Admin' : (currentUser.role === 'worker' ? t('workerDashboard') : t('employerDashboard'))}
             </span>
           )}
         </Link>
@@ -100,22 +129,32 @@ const Navbar = ({ activeTab, setActiveTab }) => {
 
         {/* User Stats & Quick Actions */}
         <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <select
+            value={i18n.language ? i18n.language.split('-')[0] : 'en'}
+            onChange={handleLanguageChange}
+            className="text-xs font-bold bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-slate-100 transition-colors mr-1 touch-target"
+          >
+            <option value="en">English</option>
+            <option value="ta">தமிழ்</option>
+          </select>
+
           {currentUser && (
             <>
               {/* Verification Badge */}
               {currentUser.verified ? (
                 <div className="flex items-center gap-0.5 text-xs text-green-600 font-semibold bg-green-50 px-2 py-1 rounded border border-green-200" title="Verified Profile">
                   <BadgeCheck size={14} className="fill-green-600 text-white" />
-                  <span className="hidden xs:inline">Verified</span>
+                  <span className="hidden xs:inline">{t('verified')}</span>
                 </div>
               ) : currentUser.verificationStatus === 'pending' ? (
                 <div className="text-xs text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded border border-amber-200" title="Under Review">
-                  <span className="hidden xs:inline">Pending Verification</span>
-                  <span className="xs:hidden">Pending</span>
+                  <span className="hidden xs:inline">{t('pendingVerification')}</span>
+                  <span className="xs:hidden">{t('pending')}</span>
                 </div>
               ) : currentUser.role && currentUser.role !== 'admin' ? (
                 <div className="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded border border-red-100" title="Needs Aadhaar Upload">
-                  <span className="hidden xs:inline">Unverified</span>
+                  <span className="hidden xs:inline">{t('unverified')}</span>
                 </div>
               ) : null}
 
@@ -126,13 +165,13 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                   className="flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-2.5 py-1 transition-colors"
                 >
                   <ShieldAlert size={14} className="text-amber-500" />
-                  <span>Admin Panel</span>
+                  <span>{t('adminPanel')}</span>
                 </Link>
               )}
 
               {/* Welcome label */}
               <div className="hidden md:flex items-center gap-4 text-sm text-slate-600 mr-2">
-                <span>Hello, <strong className="text-slate-800">{currentUser.name || 'User'}</strong></span>
+                <span>{t('hello')}, <strong className="text-slate-800">{currentUser.name || 'User'}</strong></span>
               </div>
 
               {/* Logout Button */}
@@ -140,7 +179,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                 type="button"
                 onClick={handleLogout}
                 className="text-slate-500 hover:text-slate-700 hover:bg-slate-50 p-2 rounded-lg border border-slate-200 transition-colors flex items-center justify-center touch-target"
-                title="Sign Out"
+                title={t('logout')}
               >
                 <LogOut size={16} />
               </button>

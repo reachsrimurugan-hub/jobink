@@ -1,9 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, ShieldCheck, MapPin, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const LandingPage = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-between">
@@ -16,7 +18,7 @@ const LandingPage = () => {
             onClick={() => navigate('/login')}
             className="text-sm font-bold text-primary border border-primary/20 hover:border-primary px-4 py-2 rounded-lg transition-colors touch-target flex items-center justify-center"
           >
-            Log In
+            {t('login')}
           </button>
         </div>
       </header>
@@ -26,11 +28,10 @@ const LandingPage = () => {
         {/* Hero Section */}
         <div className="text-center py-6 flex flex-col items-center gap-4">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight sm:text-4xl">
-            Find Local Part-Time <br />
-            <span className="text-primary">Workers & Jobs Nearby</span>
+            {t('heroTitle')}
           </h1>
           <p className="text-slate-600 text-sm max-w-md leading-relaxed">
-            The simplest way for shop owners, event organizers, and households to hire verified part-time helpers in their own locality.
+            {t('heroSubtitle')}
           </p>
           <div className="mt-4 flex flex-col sm:flex-row gap-3 w-full max-w-xs sm:max-w-md">
             <button
@@ -38,7 +39,7 @@ const LandingPage = () => {
               onClick={() => navigate('/login')}
               className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 px-6 rounded-xl text-sm shadow-sm transition-all touch-target"
             >
-              Get Started (Free)
+              {t('getStartedFree')}
             </button>
           </div>
         </div>
@@ -48,28 +49,28 @@ const LandingPage = () => {
         {/* How it Works */}
         <section className="text-left flex flex-col gap-5">
           <h2 className="text-xl font-bold text-slate-800 border-l-4 border-primary pl-2.5">
-            How It Works
+            {t('howWorks') || t('howItWorks')}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="border border-slate-100 bg-slate-50/50 p-4 rounded-xl">
               <span className="font-extrabold text-primary text-xl">1</span>
-              <h3 className="font-bold text-slate-800 text-sm mt-2">Quick OTP Verify</h3>
+              <h3 className="font-bold text-slate-800 text-sm mt-2">{t('quickOtpVerify')}</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Log in securely using your mobile number and simple OTP.
+                {t('quickOtpVerifyDesc')}
               </p>
             </div>
             <div className="border border-slate-100 bg-slate-50/50 p-4 rounded-xl">
               <span className="font-extrabold text-primary text-xl">2</span>
-              <h3 className="font-bold text-slate-800 text-sm mt-2">Create Profile & Verify</h3>
+              <h3 className="font-bold text-slate-800 text-sm mt-2">{t('createProfileVerify')}</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Select your role, upload Aadhaar for security badge, and list details.
+                {t('createProfileVerifyDesc')}
               </p>
             </div>
             <div className="border border-slate-100 bg-slate-50/50 p-4 rounded-xl">
               <span className="font-extrabold text-primary text-xl">3</span>
-              <h3 className="font-bold text-slate-800 text-sm mt-2">Hire & Work</h3>
+              <h3 className="font-bold text-slate-800 text-sm mt-2">{t('hireAndWork')}</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Post helper needs or apply to local jobs. Connect on WhatsApp instantly.
+                {t('hireAndWorkDesc')}
               </p>
             </div>
           </div>
@@ -80,28 +81,28 @@ const LandingPage = () => {
           <div className="border border-slate-200 p-5 rounded-xl bg-white shadow-sm flex flex-col gap-4">
             <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
               <Users className="text-primary shrink-0" size={18} />
-              For Local Employers
+              {t('forLocalEmployers')}
             </h3>
             <ul className="text-xs text-slate-600 flex flex-col gap-2 list-disc pl-4 leading-relaxed">
-              <li>Post helper requirements in 1 minute.</li>
-              <li>Filter candidates by neighborhood/area.</li>
-              <li>Access only verified workers (Aadhaar audited).</li>
-              <li>Contact selected helpers directly via WhatsApp/Call.</li>
-              <li>Rate helpers to keep the community reliable.</li>
+              <li>{t('employerBenefit1')}</li>
+              <li>{t('employerBenefit2')}</li>
+              <li>{t('employerBenefit3')}</li>
+              <li>{t('employerBenefit4')}</li>
+              <li>{t('employerBenefit5')}</li>
             </ul>
           </div>
 
           <div className="border border-slate-200 p-5 rounded-xl bg-white shadow-sm flex flex-col gap-4">
             <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
               <Briefcase className="text-primary shrink-0" size={18} />
-              For Part-Time Workers
+              {t('forPartTimeWorkers')}
             </h3>
             <ul className="text-xs text-slate-600 flex flex-col gap-2 list-disc pl-4 leading-relaxed">
-              <li>Find daily/fixed packing, delivery, support jobs near you.</li>
-              <li>Toggle availability to get noticed.</li>
-              <li>Earn direct UPI payments from trusted local businesses.</li>
-              <li>Build reviews score to get hired faster.</li>
-              <li>Completely free: zero broker cuts.</li>
+              <li>{t('workerBenefit1')}</li>
+              <li>{t('workerBenefit2')}</li>
+              <li>{t('workerBenefit3')}</li>
+              <li>{t('workerBenefit4')}</li>
+              <li>{t('workerBenefit5')}</li>
             </ul>
           </div>
         </section>
