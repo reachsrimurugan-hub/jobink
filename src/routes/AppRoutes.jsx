@@ -24,7 +24,7 @@ const PrivateRoute = ({ children }) => {
 
 // Role Route Wrapper: Redirects if user hasn't finished onboarding or has different role
 const DashboardRoute = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -44,7 +44,13 @@ const DashboardRoute = () => {
   }
   
   if (currentUser.role === 'admin') {
-    return <Navigate to="/admin" replace />;
+    if (isAdmin) {
+      return <Navigate to="/admin" replace />;
+    } else {
+      // Role is admin in DB but identifier does not match!
+      // Redirect to landing page to block access
+      return <Navigate to="/" replace />;
+    }
   }
   
   return <Navigate to="/register" replace />;
@@ -52,13 +58,13 @@ const DashboardRoute = () => {
 
 // Admin Route Wrapper
 const AdminRoute = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
   
-  if (currentUser.role !== 'admin') {
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
   

@@ -30,11 +30,16 @@ export const authService = {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
-            callback({ uid: firebaseUser.uid, ...userDoc.data() });
+            callback({ 
+              uid: firebaseUser.uid, 
+              email: firebaseUser.email || '', 
+              ...userDoc.data() 
+            });
           } else {
             // User authenticated but hasn't completed onboarding fields yet
             callback({ 
               uid: firebaseUser.uid, 
+              email: firebaseUser.email || '', 
               phone: firebaseUser.phoneNumber || '',
               name: firebaseUser.displayName || '',
               profilePhotoUrl: firebaseUser.photoURL || '',
@@ -43,7 +48,12 @@ export const authService = {
           }
         } catch (err) {
           console.error("Error fetching user profile in auth changes", err);
-          callback({ uid: firebaseUser.uid, phone: firebaseUser.phoneNumber || '', error: true });
+          callback({ 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email || '', 
+            phone: firebaseUser.phoneNumber || '', 
+            error: true 
+          });
         }
       } else {
         callback(null);
@@ -107,7 +117,11 @@ export const authService = {
   // Get profile data for a specific user
   getCurrentUser: async (uid) => {
     const userDoc = await getDoc(doc(db, 'users', uid));
-    return userDoc.exists() ? { uid, ...userDoc.data() } : null;
+    if (userDoc.exists()) {
+      const email = (auth.currentUser && auth.currentUser.uid === uid) ? auth.currentUser.email : '';
+      return { uid, email: email || '', ...userDoc.data() };
+    }
+    return null;
   },
 
   // Save/Update user profile
@@ -275,6 +289,7 @@ export const jobService = {
       workersSelectedCount: 0,
       applicants: [],
       selectedWorkers: [],
+      paymentStatus: 'pending',
       createdAt: new Date().toISOString()
     };
     
@@ -350,6 +365,20 @@ export const jobService = {
   deleteJob: async (jobId) => {
     await deleteDoc(doc(db, 'jobs', jobId));
     return true;
+  },
+
+  // Mark job as paid
+  markJobAsPaid: async (jobId, workerId, jobTitle) => {
+    const jobRef = doc(db, 'jobs', jobId);
+    await updateDoc(jobRef, { paymentStatus: 'paid' });
+    
+    // Notify the worker
+    await notificationService.addNotification(
+      workerId,
+      "Payment Confirmed",
+      "Your payment for the completed job has been marked as paid."
+    );
+    return true;
   }
 };
 
@@ -418,7 +447,8 @@ export const applicationService = {
           jobPayment: job.payment || '',
           jobPaymentType: job.paymentType || '',
           jobStatus: job.status || 'open',
-          employerId: job.employerId || ''
+          employerId: job.employerId || '',
+          paymentStatus: job.paymentStatus || 'pending'
         };
       })
     );
@@ -443,7 +473,9 @@ export const applicationService = {
           const workersSelectedCount = selectedWorkers.length;
           const updates = {
             selectedWorkers,
-            workersSelectedCount
+            workersSelectedCount,
+            workerId: workerId,
+            paymentStatus: 'pending'
           };
           // If total selected reaches workers needed, change status to booked
           if (workersSelectedCount >= (job.workersNeeded || 1)) {

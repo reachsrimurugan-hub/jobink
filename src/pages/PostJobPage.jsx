@@ -27,6 +27,11 @@ const PostJobPage = () => {
     e.preventDefault();
     setError('');
 
+    if (!currentUser.verified) {
+      setError(t('verificationRequiredToPost'));
+      return;
+    }
+
     if (!title.trim() || !description.trim()) {
       setError(t('pleaseFillTitleDesc'));
       return;
@@ -92,6 +97,26 @@ const PostJobPage = () => {
             <h2 className="font-extrabold text-slate-800 text-lg">{t('postHelperRequirement')}</h2>
             <p className="text-slate-500 text-xs mt-1">{t('postJobSubtitle')}</p>
           </div>
+
+          {!currentUser.verified && (
+            <div className={`mb-5 p-4 rounded-xl border flex items-start gap-3 text-left shadow-sm ${
+              currentUser.verificationStatus === 'pending'
+                ? 'bg-amber-50/70 border-amber-200 text-amber-800'
+                : 'bg-red-50/70 border-red-200 text-red-800'
+            }`}>
+              <ShieldAlert className={currentUser.verificationStatus === 'pending' ? 'text-amber-600 shrink-0 mt-0.5' : 'text-red-600 shrink-0 mt-0.5'} size={18} />
+              <div>
+                <h4 className="font-bold text-xs uppercase tracking-wide">
+                  {currentUser.verificationStatus === 'pending' ? t('pendingVerification') : t('unverified')}
+                </h4>
+                <p className="text-xs mt-1 leading-normal font-medium text-slate-600">
+                  {currentUser.verificationStatus === 'pending'
+                    ? t('postJobLockedDesc')
+                    : t('postJobLockedRejectedDesc')}
+                </p>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 text-red-700 text-xs font-semibold p-3 rounded-lg border border-red-100 mb-5 flex items-start gap-1.5">

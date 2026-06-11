@@ -10,7 +10,7 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
 import Modal from '../components/Modal';
-import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3 } from 'lucide-react';
+import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const WorkerDashboard = () => {
@@ -52,6 +52,7 @@ const WorkerDashboard = () => {
   const [profileError, setProfileError] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [editUpiId, setEditUpiId] = useState('');
 
   // Phone Change States
   const [newPhone, setNewPhone] = useState('');
@@ -67,6 +68,7 @@ const WorkerDashboard = () => {
     if (currentUser) {
       setEditPhoto(currentUser.profilePhotoUrl || '');
       setEditDescription(currentUser.description || '');
+      setEditUpiId(currentUser.upiId || '');
     }
   }, [currentUser]);
 
@@ -98,7 +100,8 @@ const WorkerDashboard = () => {
     try {
       await updateProfile({
         profilePhotoUrl: editPhoto || currentUser.profilePhotoUrl,
-        description: editDescription
+        description: editDescription,
+        upiId: editUpiId
       });
       setProfileSuccess('Profile updated successfully!');
       setProfileSaving(false);
@@ -314,6 +317,27 @@ const WorkerDashboard = () => {
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
         
         <main className="max-w-4xl mx-auto px-4 py-6">
+          {/* Verification Status Warning Banners */}
+          {!currentUser.verified && (
+            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-left shadow-sm ${
+              currentUser.verificationStatus === 'pending'
+                ? 'bg-amber-50/70 border-amber-200 text-amber-800'
+                : 'bg-red-50/70 border-red-200 text-red-800'
+            }`}>
+              <ShieldAlert className={currentUser.verificationStatus === 'pending' ? 'text-amber-600 shrink-0 mt-0.5' : 'text-red-600 shrink-0 mt-0.5'} size={18} />
+              <div>
+                <h4 className="font-bold text-xs uppercase tracking-wide">
+                  {currentUser.verificationStatus === 'pending' ? t('pendingVerification') : t('unverified')}
+                </h4>
+                <p className="text-xs mt-1 leading-normal font-medium text-slate-600">
+                  {currentUser.verificationStatus === 'pending'
+                    ? t('pendingVerificationDescWorker')
+                    : t('rejectedVerificationDescWorker')}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: Job Feed */}
           {activeTab === 'home' && (
             <div className="flex flex-col gap-6">
@@ -509,6 +533,19 @@ const WorkerDashboard = () => {
                       {/* Selected actions (Completed Jobs) */}
                       {app.status === 'selected' && app.jobStatus === 'completed' && (
                         <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                          <div className="flex justify-between items-center bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs mb-1">
+                            <span className="font-semibold text-slate-500">Payment Status:</span>
+                            {app.paymentStatus === 'paid' ? (
+                              <span className="bg-green-100 text-green-800 border border-green-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                                Paid
+                              </span>
+                            ) : (
+                              <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                                Pending Payment
+                              </span>
+                            )}
+                          </div>
+
                           <span className="text-[11px] font-bold text-slate-500 block">{t('workCompletedFeedback')}</span>
                           <button
                             type="button"
@@ -722,6 +759,21 @@ const WorkerDashboard = () => {
                     <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
                   )}
                 </div>
+              </div>
+
+              {/* UPI ID Input */}
+              <div>
+                <label htmlFor="upiId" className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
+                  UPI ID (for payments)
+                </label>
+                <input
+                  id="upiId"
+                  type="text"
+                  placeholder="e.g. name@upi"
+                  value={editUpiId}
+                  onChange={(e) => setEditUpiId(e.target.value.trim())}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-primary"
+                />
               </div>
 
               {/* Profile Description */}

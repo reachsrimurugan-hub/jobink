@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MapPin, Clock, IndianRupee, Users, BadgeCheck, Phone, MessageSquare, Briefcase, MoreVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { authService } from '../services/db';
 
 const JobCard = ({ 
   job, 
@@ -12,9 +13,13 @@ const JobCard = ({
   onViewApplicants, 
   onMarkCompleted,
   onDelete,
-  onViewEmployerProfile
+  onViewEmployerProfile,
+  onMarkPaid
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isTamil = i18n.language?.startsWith('ta');
+  const labelClass = isTamil ? 'text-[8px] tracking-normal' : 'text-[9px] tracking-wider';
+  const valueClass = isTamil ? 'text-xs' : 'text-[13px]';
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -31,6 +36,26 @@ const JobCard = ({
     status,
     createdAt
   } = job;
+
+  const [workerProfile, setWorkerProfile] = useState(null);
+  const [loadingWorker, setLoadingWorker] = useState(false);
+
+  useEffect(() => {
+    const fetchWorkerProfile = async () => {
+      if (status === 'completed' && userRole === 'employer' && job.workerId) {
+        try {
+          setLoadingWorker(true);
+          const profile = await authService.getCurrentUser(job.workerId);
+          setWorkerProfile(profile);
+          setLoadingWorker(false);
+        } catch (e) {
+          console.error("Error fetching worker profile for payment:", e);
+          setLoadingWorker(false);
+        }
+      }
+    };
+    fetchWorkerProfile();
+  }, [status, userRole, job.workerId]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -169,51 +194,126 @@ const JobCard = ({
 
             <p className="text-slate-500 text-xs mt-1.5 leading-relaxed break-words">{description}</p>
 
-            <div className={
-              userRole === 'employer'
-                ? 'grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-t border-slate-100 mt-5 pt-4'
-                : 'grid grid-cols-2 md:grid-cols-3 gap-4 py-4 border-t border-slate-100 mt-5 pt-4'
-            }>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 py-4 border-t border-slate-100 mt-5 pt-4">
               {/* Column 1: Payment */}
-              <div className="flex items-start gap-2.5">
-                <IndianRupee className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                <div className="text-left">
-                  <div className="font-bold text-slate-800 text-sm">₹{payment}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 font-semibold uppercase tracking-wider">{paymentType === 'per day' ? t('perDayLabel') : t('fixedLabel')}</div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <IndianRupee className="w-4 h-4" />
+                </div>
+                <div className="text-left min-w-0">
+                  <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{paymentType === 'per day' ? t('perDayLabel') : t('fixedLabel')}</div>
+                  <div className={`font-bold text-slate-800 leading-none ${valueClass}`}>₹{payment}</div>
                 </div>
               </div>
-              
-              {/* Column 2: Location */}
-              <div className="flex items-start gap-2.5 border-l border-slate-100 pl-4">
-                <MapPin className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                <div className="text-left">
-                  <div className="font-bold text-slate-800 text-sm">{cityPart ? `${cityPart},` : ''}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 font-semibold uppercase tracking-wider">{areaPart || t('location')}</div>
+
+              {/* Column 2: Time */}
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="text-left min-w-0">
+                  <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{timeSub}</div>
+                  <div className={`font-bold text-slate-800 truncate leading-none ${valueClass}`} title={timeMain}>{timeMain}</div>
                 </div>
               </div>
-              
-              {/* Column 3: Time */}
-              <div className="flex items-start gap-2.5 border-none pl-0 md:border-l md:border-slate-100 md:pl-4">
-                <Clock className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                <div className="text-left">
-                  <div className="font-bold text-slate-800 text-sm truncate max-w-[120px] sm:max-w-none" title={timeMain}>{timeMain}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5 font-semibold uppercase tracking-wider">{timeSub}</div>
+
+              {/* Column 3: Location */}
+              <div className="flex items-center gap-2.5 col-span-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="text-left min-w-0 flex-1">
+                  <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{areaPart || t('location')}</div>
+                  <div className={`font-bold text-slate-800 leading-normal ${valueClass}`} title={location}>{location}</div>
                 </div>
               </div>
-              
+
               {/* Column 4: Applicants (Employer Only) */}
               {userRole === 'employer' && (
-                <div className="flex items-start gap-2.5 border-l border-slate-100 pl-4 col-span-1">
-                  <Users className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                  <div className="text-left">
-                    <div className="font-bold text-slate-800 text-sm">{t('applicants')}</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 font-semibold uppercase tracking-wider">
-                      {applicants.length} ({workersSelectedCount} selected / {workersNeeded} needed)
+                <div className="flex items-center gap-2.5 col-span-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div className="text-left min-w-0 flex-1">
+                    <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{t('applicants')}</div>
+                    <div className={`font-bold text-slate-800 leading-normal ${valueClass}`}>
+                      {applicants.length} ({workersSelectedCount}/{workersNeeded} selected)
                     </div>
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Direct UPI Payment Section (Employer side) */}
+            {status === 'completed' && userRole === 'employer' && (
+              <div className="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-3.5 shadow-sm text-left animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Direct UPI Payment</span>
+                  {job.paymentStatus === 'paid' ? (
+                    <span className="bg-green-100 text-green-800 border border-green-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                      Paid
+                    </span>
+                  ) : (
+                    <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                      Pending Payment
+                    </span>
+                  )}
+                </div>
+
+                {loadingWorker ? (
+                  <div className="text-slate-400 animate-pulse text-xs font-semibold py-2">Loading worker details...</div>
+                ) : workerProfile ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-3">
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker</span>
+                        <span className="font-bold text-slate-800 text-[13px]">{workerProfile.name}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">UPI ID</span>
+                        <span className="font-mono font-bold text-slate-800 text-[11px] break-all">{workerProfile.upiId || 'Not Registered'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Amount</span>
+                        <span className="font-extrabold text-slate-900 text-sm">₹{payment}</span>
+                      </div>
+
+                      <div className="flex gap-2 shrink-0">
+                        {workerProfile.upiId && job.paymentStatus !== 'paid' && (
+                          <a
+                            href={`upi://pay?pa=${workerProfile.upiId}&pn=${encodeURIComponent(workerProfile.name)}&am=${payment}&cu=INR`}
+                            className="bg-primary hover:bg-primary-dark text-white font-bold px-3 py-2 rounded-xl text-xs shadow-md transition-all flex items-center justify-center hover:scale-102 touch-target"
+                          >
+                            Pay via UPI
+                          </a>
+                        )}
+                        {job.paymentStatus !== 'paid' ? (
+                          <button
+                            type="button"
+                            onClick={() => onMarkPaid && onMarkPaid(job.id, job.workerId, title)}
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold px-3 py-2 rounded-xl text-xs shadow-md transition-colors touch-target"
+                          >
+                            Mark as Paid
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="bg-slate-100 text-slate-400 border border-slate-200 font-bold px-3 py-2 rounded-xl text-xs cursor-not-allowed"
+                          >
+                            Mark as Paid
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-red-500 font-bold py-2">Worker details not found.</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

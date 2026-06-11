@@ -6,13 +6,13 @@ import { notificationService } from '../services/db';
 import { useTranslation } from 'react-i18next';
 
 const Navbar = ({ activeTab, setActiveTab }) => {
-  const { currentUser, logout, updateProfile, startTransition, endTransition } = useAuth();
+  const { currentUser, logout, updateProfile, startTransition, endTransition, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
-    if (!currentUser || currentUser.role === 'admin') return;
+    if (!currentUser || isAdmin) return;
     const unsubscribe = notificationService.getUserNotifications(currentUser.uid, (data) => {
       const count = data.filter(n => !n.read).length;
       setUnreadCount(count);
@@ -20,7 +20,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [currentUser]);
+  }, [currentUser, isAdmin]);
 
   const handleLogout = async () => {
     try {
@@ -92,13 +92,13 @@ const Navbar = ({ activeTab, setActiveTab }) => {
           </span>
           {currentUser?.role && (
             <span className="text-[10px] uppercase font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded tracking-wide border border-slate-200 hidden xs:inline">
-              {currentUser.role === 'admin' ? 'Admin' : (currentUser.role === 'worker' ? t('workerDashboard') : t('employerDashboard'))}
+              {isAdmin ? 'Admin' : (currentUser.role === 'worker' ? t('workerDashboard') : t('employerDashboard'))}
             </span>
           )}
         </Link>
 
         {/* Desktop Navigation links */}
-        {currentUser?.role && currentUser.role !== 'admin' && (
+        {currentUser?.role && !isAdmin && (
           <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 border border-slate-200/50 p-1 rounded-xl">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -158,8 +158,8 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                 </div>
               ) : null}
 
-              {/* Admin Portal Shortcut (Strict check for admin role only) */}
-              {currentUser.role === 'admin' && (
+              {/* Admin Portal Shortcut (Strict check for admin role and identifier) */}
+              {isAdmin && (
                 <Link 
                   to="/admin" 
                   className="flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded px-2.5 py-1 transition-colors"

@@ -112,9 +112,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const adminIdentifier = import.meta.env.VITE_ADMIN_IDENTIFIER;
+  const isAdmin = currentUser?.role === 'admin' && (
+    currentUser.uid === adminIdentifier ||
+    currentUser.phone === adminIdentifier ||
+    (currentUser.email && currentUser.email === adminIdentifier)
+  );
+
   const value = {
     currentUser,
     loading,
+    isAdmin,
     phoneNumberAttempt,
     isTransitioning,
     startTransition,

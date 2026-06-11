@@ -397,6 +397,18 @@ const EmployerDashboard = () => {
     }
   };
 
+  const handleMarkJobPaid = async (jobId, workerId, jobTitle) => {
+    try {
+      setLoading(true);
+      await jobService.markJobAsPaid(jobId, workerId, jobTitle);
+      await loadEmployerData();
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to mark job as paid:", err);
+      setLoading(false);
+    }
+  };
+
   const handleMarkNotifRead = async (id) => {
     try {
       await notificationService.markNotificationRead(id);
@@ -435,6 +447,27 @@ const EmployerDashboard = () => {
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <main className="max-w-4xl mx-auto px-4 py-6">
+          {/* Verification Status Warning Banners */}
+          {!currentUser.verified && (
+            <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 text-left shadow-sm ${
+              currentUser.verificationStatus === 'pending'
+                ? 'bg-amber-50/70 border-amber-200 text-amber-800'
+                : 'bg-red-50/70 border-red-200 text-red-800'
+            }`}>
+              <ShieldAlert className={currentUser.verificationStatus === 'pending' ? 'text-amber-600 shrink-0 mt-0.5' : 'text-red-600 shrink-0 mt-0.5'} size={18} />
+              <div>
+                <h4 className="font-bold text-xs uppercase tracking-wide">
+                  {currentUser.verificationStatus === 'pending' ? t('pendingVerification') : t('unverified')}
+                </h4>
+                <p className="text-xs mt-1 leading-normal font-medium text-slate-600">
+                  {currentUser.verificationStatus === 'pending'
+                    ? t('pendingVerificationDescEmployer')
+                    : t('rejectedVerificationDescEmployer')}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: Overview Dashboard */}
           {activeTab === 'home' && (() => {
             const totalApplications = myJobs.reduce((acc, job) => acc + (job.applicants?.length || 0), 0);
@@ -567,6 +600,7 @@ const EmployerDashboard = () => {
                               onViewApplicants={handleOpenApplicants}
                               onMarkCompleted={handleMarkJobCompleted}
                               onDelete={handleDeleteJob}
+                              onMarkPaid={handleMarkJobPaid}
                             />
                           ))}
                         </div>
@@ -737,6 +771,7 @@ const EmployerDashboard = () => {
                           onViewApplicants={handleOpenApplicants}
                           onMarkCompleted={handleMarkJobCompleted}
                           onDelete={handleDeleteJob}
+                          onMarkPaid={handleMarkJobPaid}
                         />
                       ))}
                     </div>
