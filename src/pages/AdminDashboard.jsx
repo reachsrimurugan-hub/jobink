@@ -10,7 +10,7 @@ const AdminDashboard = () => {
   const { currentUser } = useAuth();
 
   useMetadata(
-    "Admin Dashboard - WorkLink",
+    "Admin Dashboard - Jobink",
     "Audit Aadhaar verifications, review phone change request queues, handle user reporting, and resolve user query communications."
   );
   const [pendingUsers, setPendingUsers] = useState([]);

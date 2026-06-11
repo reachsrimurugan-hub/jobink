@@ -9,8 +9,8 @@ const LandingPage = () => {
   const { t } = useTranslation();
 
   useMetadata(
-    "WorkLink - Hyperlocal Part-Time Jobs & Helpers Marketplace",
-    "WorkLink connects shop owners, local employers, and households with verified part-time helpers in their neighborhood instantly. Easy UPI payments and Aadhaar verified badges."
+    "JobLink - Hyperlocal Part-Time Jobs & Helpers Marketplace",
+    "JobLink connects shop owners, local employers, and households with verified part-time helpers in their neighborhood instantly. Easy UPI payments and Aadhaar verified badges."
   );
 
   return (
@@ -18,7 +18,7 @@ const LandingPage = () => {
       {/* Top Header */}
       <header className="border-b border-slate-100 py-4 px-4 bg-white sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <span className="font-bold text-xl text-primary tracking-tight">WorkLink</span>
+          <span className="font-bold text-xl text-primary tracking-tight">Jobink</span>
           <button
             type="button"
             onClick={() => navigate('/login')}
@@ -117,7 +117,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="bg-slate-50 border-t border-slate-200 py-6 px-4 text-center mt-12">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-500">
-          <span>© {new Date().getFullYear()} WorkLink Marketplace. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Jobink Marketplace. All rights reserved.</span>
           <div className="flex gap-4">
             <span>Direct UPI Payments</span>
             <span>•</span>

@@ -13,8 +13,8 @@ const PostJobPage = () => {
   const { t } = useTranslation();
 
   useMetadata(
-    "Post a Job - WorkLink",
-    "Post your part-time helper requirement on WorkLink. Specify manual task details, working hours, neighborhood location, and direct payment amount."
+    "Post a Job - Jobink",
+    "Post your part-time helper requirement on Jobink. Specify manual task details, working hours, neighborhood location, and direct payment amount."
   );
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

@@ -21,7 +21,7 @@ const WorkerDashboard = () => {
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
 
   useMetadata(
-    "Worker Dashboard - WorkLink",
+    "Worker Dashboard - Jobink",
     "View available local jobs, start work, complete tasks, receive payments directly via UPI, and manage your applications."
   );
   const [jobs, setJobs] = useState([]);
@@ -593,7 +593,7 @@ const WorkerDashboard = () => {
                   <h3 className="font-extrabold text-slate-800 text-sm">💬 Query Admin</h3>
                 </div>
                 <p className="text-slate-500 text-xs leading-relaxed">
-                  Have any queries or need assistance? Type your message below to notify the WorkLink admin directly.
+                  Have any queries or need assistance? Type your message below to notify the Jobink admin directly.
                 </p>
 
                 {queryError && (

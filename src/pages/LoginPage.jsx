@@ -16,7 +16,7 @@ const LoginPage = () => {
   const { t } = useTranslation();
 
   useMetadata(
-    "Login to WorkLink - Connect Instantly",
+    "Login to Jobink - Connect Instantly",
     "Log in securely using your mobile phone number and easy OTP verification to browse part-time jobs or hire manual helpers in your locality."
   );
 
@@ -108,7 +108,7 @@ const LoginPage = () => {
       <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col gap-6 text-center">
         {/* Brand Header */}
         <div>
-          <h1 className="font-extrabold text-2xl text-primary tracking-tight">WorkLink</h1>
+          <h1 className="font-extrabold text-2xl text-primary tracking-tight">Jobink</h1>
           <p className="text-slate-500 text-xs mt-1.5">{t('appTagline')}</p>
         </div>
 

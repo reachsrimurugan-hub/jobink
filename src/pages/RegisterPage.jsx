@@ -12,8 +12,8 @@ const RegisterPage = () => {
   const { t, i18n } = useTranslation();
 
   useMetadata(
-    "Join WorkLink - Complete Your Profile",
-    "Register and complete your WorkLink profile. Choose your role as a helper or employer, list your skills, and verify your Aadhaar card for safety."
+    "Join Jobink - Complete Your Profile",
+    "Register and complete your Jobink profile. Choose your role as a helper or employer, list your skills, and verify your Aadhaar card for safety."
   );
   
   // Registration States

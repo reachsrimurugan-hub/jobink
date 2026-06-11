@@ -119,7 +119,7 @@ const JobCard = ({
                 {t('callEmployer')}
               </a>
               <a 
-                href={`https://wa.me/${job.employerPhone?.replace(/[^0-9]/g, '')}?text=Hello, I have been selected for the "${title}" job on WorkLink.`}
+                href={`https://wa.me/${job.employerPhone?.replace(/[^0-9]/g, '')}?text=Hello, I have been selected for the "${title}" job on Jobink.`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 touch-target"

@@ -21,8 +21,8 @@ const EmployerDashboard = () => {
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
 
   useMetadata(
-    "Employer Dashboard - WorkLink",
-    "Post job requirements, audit applicant profiles, verify completed tasks, and manage part-time neighborhood hiring on WorkLink."
+    "Employer Dashboard - Jobink",
+    "Post job requirements, audit applicant profiles, verify completed tasks, and manage part-time neighborhood hiring on Jobink."
   );
   const [myJobs, setMyJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -1138,7 +1138,7 @@ const EmployerDashboard = () => {
                           <Phone size={13} /> {t('callWorker')}
                         </a>
                         <a 
-                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on WorkLink. Please reply.`}
+                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on Jobink. Please reply.`}
                           target="_blank"
                           rel="noreferrer"
                           className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
