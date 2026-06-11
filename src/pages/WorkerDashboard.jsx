@@ -12,18 +12,12 @@ import ProfileViewModal from '../components/ProfileViewModal';
 import Modal from '../components/Modal';
 import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useMetadata } from '../hooks/useMetadata';
 
 const WorkerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
-
-  useMetadata(
-    "Worker Dashboard - Jobink",
-    "View available local jobs, start work, complete tasks, receive payments directly via UPI, and manage your applications."
-  );
   const [jobs, setJobs] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -593,7 +587,7 @@ const WorkerDashboard = () => {
                   <h3 className="font-extrabold text-slate-800 text-sm">💬 Query Admin</h3>
                 </div>
                 <p className="text-slate-500 text-xs leading-relaxed">
-                  Have any queries or need assistance? Type your message below to notify the Jobink admin directly.
+                  Have any queries or need assistance? Type your message below to notify the WorkLink admin directly.
                 </p>
 
                 {queryError && (

@@ -12,18 +12,12 @@ import ProfileViewModal from '../components/ProfileViewModal';
 import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.png';
-import { useMetadata } from '../hooks/useMetadata';
 
 const EmployerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
-
-  useMetadata(
-    "Employer Dashboard - Jobink",
-    "Post job requirements, audit applicant profiles, verify completed tasks, and manage part-time neighborhood hiring on Jobink."
-  );
   const [myJobs, setMyJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -1138,7 +1132,7 @@ const EmployerDashboard = () => {
                           <Phone size={13} /> {t('callWorker')}
                         </a>
                         <a 
-                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on Jobink. Please reply.`}
+                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on WorkLink. Please reply.`}
                           target="_blank"
                           rel="noreferrer"
                           className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"

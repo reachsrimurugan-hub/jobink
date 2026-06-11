@@ -4,15 +4,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { authService, reportService, queryService } from '../services/db';
 import Navbar from '../components/Navbar';
 import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare } from 'lucide-react';
-import { useMetadata } from '../hooks/useMetadata';
 
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
-
-  useMetadata(
-    "Admin Dashboard - Jobink",
-    "Audit Aadhaar verifications, review phone change request queues, handle user reporting, and resolve user query communications."
-  );
   const [pendingUsers, setPendingUsers] = useState([]);
   const [pendingPhoneChanges, setPendingPhoneChanges] = useState([]);
   const [pendingReports, setPendingReports] = useState([]);

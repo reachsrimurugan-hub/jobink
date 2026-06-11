@@ -4,17 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
 import { ShieldCheck, UserCheck, Briefcase, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useMetadata } from '../hooks/useMetadata';
 
 const RegisterPage = () => {
   const { currentUser, updateProfile } = useAuth();
   const [step, setStep] = useState(1);
   const { t, i18n } = useTranslation();
-
-  useMetadata(
-    "Join Jobink - Complete Your Profile",
-    "Register and complete your Jobink profile. Choose your role as a helper or employer, list your skills, and verify your Aadhaar card for safety."
-  );
   
   // Registration States
   const [role, setRole] = useState('');
@@ -129,7 +123,7 @@ const RegisterPage = () => {
         {/* Step Indicator Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div>
-            <h1 className="font-extrabold text-lg text-primary tracking-tight">{t('profileSetup')}</h1>
+            <span className="font-extrabold text-lg text-primary tracking-tight">{t('profileSetup')}</span>
             <p className="text-slate-500 text-xs mt-0.5">{t('profileSetupDesc')}</p>
           </div>
           <div className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded">
