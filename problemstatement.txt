@@ -1,0 +1,144 @@
+## Project Title
+
+**WorkLink – Hyperlocal Part-Time Job Marketplace**
+
+## Problem Statement
+
+In India, many local employers such as shop owners, households, event organizers, and small businesses frequently need workers for short-term jobs like house shifting, packing, loading/unloading, cleaning, delivery assistance, AC servicing support, and event setup. At the same time, many students, part-time workers, and daily wage laborers are willing to work but struggle to find reliable job opportunities nearby.
+
+Currently, these jobs are mostly shared through word-of-mouth, local brokers, WhatsApp groups, or personal contacts. This creates several problems:
+
+* Employers cannot quickly find available workers.
+* Workers miss job opportunities due to limited connections.
+* There is no centralized platform for local part-time jobs.
+* Communication and hiring processes are unorganized.
+* Fake profiles and trust issues make hiring risky.
+
+Therefore, there is a need for a simple digital platform that connects employers and workers within the same locality, allowing employers to post jobs and workers to discover and apply for them easily.
+
+---
+
+## Proposed Solution
+
+WorkLink is a web application that connects local employers and workers through a location-based job marketplace.
+
+The platform contains two types of users:
+
+### 1. Employer
+
+* Creates an account.
+* Posts job requirements.
+* Specifies location, payment, duration, and number of workers needed.
+* Reviews worker applications.
+* Selects suitable workers.
+* Contacts workers through WhatsApp or phone call.
+* Marks jobs as completed.
+
+### 2. Worker
+
+* Creates an account.
+* Selects location and skills.
+* Sets availability status (Available/Working).
+* Views jobs posted in their selected location.
+* Applies for jobs.
+* Receives notifications when selected.
+* Contacts employers through WhatsApp or phone call.
+
+---
+
+## Simplified Workflow
+
+### Step 1: User Registration
+
+Both employers and workers register using mobile number verification.
+
+↓
+
+### Step 2: Profile Creation
+
+Users complete their profiles and select their location.
+
+↓
+
+### Step 3: Job Posting
+
+Employer posts a job with:
+
+* Job title
+* Description
+* Payment
+* Working hours
+* Location
+
+↓
+
+### Step 4: Job Feed
+
+Workers view available jobs in their selected location.
+
+↓
+
+### Step 5: Job Application
+
+Interested workers apply for the job.
+
+↓
+
+### Step 6: Worker Selection
+
+Employer reviews applicants and selects workers.
+
+↓
+
+### Step 7: Notification
+
+Selected workers receive a notification and job status changes to "Booked".
+
+↓
+
+### Step 8: Communication
+
+Employer and worker communicate through:
+
+* WhatsApp
+* Phone call
+
+↓
+
+### Step 9: Job Completion
+
+Worker completes the assigned work.
+
+↓
+
+### Step 10: Payment
+
+Employer pays the worker directly through UPI.
+
+↓
+
+### Step 11: Rating & Feedback
+
+Both users can rate each other to improve trust and reliability.
+
+---
+
+## Key Features
+
+* Mobile OTP Authentication
+* Separate Worker and Employer Dashboards
+* Job Posting System
+* Location-Based Job Feed
+* Availability Status
+* WhatsApp Integration
+* Phone Call Integration
+* Job Status Tracking
+* User Verification
+* Rating and Feedback System
+* Real-Time Updates using Firebase
+
+---
+
+## Expected Outcome
+
+The platform will help employers quickly find local workers and provide students and part-time workers with easier access to nearby job opportunities, reducing dependency on brokers and informal hiring methods while improving trust and transparency in local job recruitment.

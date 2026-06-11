@@ -1,0 +1,123 @@
+
+
+## User Verification Workflow
+
+### Step 1: Registration
+
+User registers using their mobile number.
+
+⬇
+
+### Step 2: OTP Verification
+
+Firebase sends an OTP to the user's phone number.
+
+⬇
+
+### Step 3: Profile Creation
+
+User fills:
+
+* Name
+* Profile Photo
+* Location
+* Role (Worker / Employer)
+
+⬇
+
+### Step 4: Identity Upload
+
+User uploads:
+
+* Aadhaar Card
+* Profile Photo
+
+Status:
+
+```text
+Verification Pending
+```
+
+⬇
+
+### Step 5: Admin Review
+
+Admin checks:
+
+* Mobile number verified
+* Aadhaar uploaded
+* Profile photo available
+
+⬇
+
+### Step 6: Account Approval
+
+If details are valid:
+
+```text
+✓ Verified User
+```
+
+Otherwise:
+
+```text
+✗ Verification Rejected
+```
+
+⬇
+
+### Step 7: Platform Access
+
+Verified users can:
+
+* Post jobs
+* Apply for jobs
+* Contact users
+* Receive ratings
+
+⬇
+
+### Step 8: Rating & Reporting
+
+After job completion:
+
+* Users rate each other
+* Users can report fake accounts
+
+⬇
+
+### Step 9: Admin Monitoring
+
+Admin reviews reports and can:
+
+* Suspend account
+* Remove fake users
+* Block fraudulent activities
+
+---
+
+### Simple Flow Diagram
+
+```text
+Register
+   ↓
+Mobile OTP Verification
+   ↓
+Create Profile
+   ↓
+Upload Aadhaar + Photo
+   ↓
+Admin Verification
+   ↓
+Verified Badge Issued
+   ↓
+Use Platform
+   ↓
+Ratings & Reports
+   ↓
+Admin Monitoring
+```
+
+### One-Line Explanation for Viva
+
+> To prevent fraud and misuse, every user must verify their mobile number through Firebase OTP authentication and upload identity proof for admin approval before accessing job posting and application features. User ratings, reporting mechanisms, and admin monitoring further ensure platform trust and safety.
