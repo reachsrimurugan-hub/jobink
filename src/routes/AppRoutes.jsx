@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { ShieldAlert } from 'lucide-react';
 
 // Import Pages (will be created in subsequent steps)
 import LandingPage from '../pages/LandingPage';
@@ -24,7 +25,7 @@ const PrivateRoute = ({ children }) => {
 
 // Role Route Wrapper: Redirects if user hasn't finished onboarding or has different role
 const DashboardRoute = () => {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, logout } = useAuth();
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -48,8 +49,28 @@ const DashboardRoute = () => {
       return <Navigate to="/admin" replace />;
     } else {
       // Role is admin in DB but identifier does not match!
-      // Redirect to landing page to block access
-      return <Navigate to="/" replace />;
+      // Render a clean Access Denied page to avoid infinite redirect loop
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 max-w-md shadow-sm flex flex-col items-center gap-4 text-left">
+            <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 mx-auto">
+              <ShieldAlert size={24} />
+            </div>
+            <div className="text-center w-full">
+              <h2 className="text-lg font-bold text-slate-800">Access Denied</h2>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                Your database profile is registered as <strong>admin</strong>, but your email or mobile number identifier is not authorized in the environment credentials.
+              </p>
+            </div>
+            <button
+              onClick={() => logout()}
+              className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-6 rounded-xl text-xs transition-colors cursor-pointer w-full text-center mt-2 shadow-sm"
+            >
+              Sign Out & Sign In as regular user
+            </button>
+          </div>
+        </div>
+      );
     }
   }
   
