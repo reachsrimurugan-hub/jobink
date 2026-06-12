@@ -168,9 +168,37 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
               <span className="text-[10px] uppercase font-bold text-slate-400 mt-1 block">
                 {profile.role === 'worker' ? 'Helper / Worker' : `${profile.businessType || 'Household'} Employer`}
               </span>
-              <div className="flex items-center gap-1.5 mt-2">
+              <div className="flex items-center gap-1.5 mt-1.5">
                 <RatingStars rating={profile.rating || 0} size={13} />
                 <span className="text-xs text-slate-400 font-semibold">({profile.ratingCount || 0} reviews)</span>
+              </div>
+              <div className="mt-2.5 text-xs space-y-1.5 font-medium text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Trust Score:</span>
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                    (profile.trustScore || 0) >= 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    {profile.trustScore || 0}
+                  </span>
+                </div>
+                {profile.role === 'employer' ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 font-bold text-[10px] uppercase">Trust Level:</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      (profile.completedJobs || 0) >= 50 ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                      (profile.completedJobs || 0) >= 10 ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                      'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}>
+                      {(profile.completedJobs || 0) >= 50 ? 'Trusted Employer' :
+                       (profile.completedJobs || 0) >= 10 ? 'Verified Employer' : 'New Employer'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-400 font-bold text-[10px] uppercase">Completed Jobs:</span>
+                    <span className="font-extrabold text-slate-700">{profile.completedJobs || 0}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -210,7 +238,13 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-600">
                   <Clock size={15} className="text-slate-400 shrink-0" />
-                  <span>Availability: <strong>{profile.availability ? '🟢 Available' : '🔴 Busy'}</strong></span>
+                  <span className="flex items-center gap-1.5">
+                    {t('availability') || 'Availability'}:{' '}
+                    <strong className="inline-flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${profile.availability ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                      {profile.availability ? (t('available') || 'Available') : (t('busy') || 'Busy')}
+                    </strong>
+                  </span>
                 </div>
               </>
             ) : (

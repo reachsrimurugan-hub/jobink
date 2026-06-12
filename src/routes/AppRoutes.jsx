@@ -1,16 +1,24 @@
-import React from 'react';
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ShieldAlert } from 'lucide-react';
 
-// Import Pages (will be created in subsequent steps)
-import LandingPage from '../pages/LandingPage';
-import LoginPage from '../pages/LoginPage';
-import RegisterPage from '../pages/RegisterPage';
-import WorkerDashboard from '../pages/WorkerDashboard';
-import EmployerDashboard from '../pages/EmployerDashboard';
-import PostJobPage from '../pages/PostJobPage';
-import AdminDashboard from '../pages/AdminDashboard';
+// Lazy load pages for dynamic code splitting
+const LandingPage = lazy(() => import('../pages/LandingPage'));
+const LoginPage = lazy(() => import('../pages/LoginPage'));
+const RegisterPage = lazy(() => import('../pages/RegisterPage'));
+const WorkerDashboard = lazy(() => import('../pages/WorkerDashboard'));
+const EmployerDashboard = lazy(() => import('../pages/EmployerDashboard'));
+const PostJobPage = lazy(() => import('../pages/PostJobPage'));
+const AdminDashboard = lazy(() => import('../pages/AdminDashboard'));
+
+// Page loader fallback
+const PageLoader = () => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+    <div className="spinner mb-3"></div>
+    <p className="text-slate-500 text-xs font-semibold">Loading WorkLink...</p>
+  </div>
+);
 
 // Private Route Wrapper: Requires authenticated session
 const PrivateRoute = ({ children }) => {
@@ -96,60 +104,62 @@ const AppRoutes = () => {
   const { currentUser } = useAuth();
 
   return (
-    <Routes>
-      {/* Public Routes */}
-      <Route 
-        path="/" 
-        element={currentUser ? <Navigate to="/dashboard" replace /> : <LandingPage />} 
-      />
-      <Route 
-        path="/login" 
-        element={currentUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
-      />
-      
-      {/* Onboarding On-demand Route */}
-      <Route 
-        path="/register" 
-        element={
-          <PrivateRoute>
-            {currentUser?.role ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
-          </PrivateRoute>
-        } 
-      />
-      
-      {/* Dashboard Route (resolves dynamically based on role) */}
-      <Route 
-        path="/dashboard" 
-        element={
-          <PrivateRoute>
-            <DashboardRoute />
-          </PrivateRoute>
-        } 
-      />
-      
-      {/* Employer Only: Post Job */}
-      <Route 
-        path="/post-job" 
-        element={
-          <PrivateRoute>
-            {currentUser?.role === 'employer' ? <PostJobPage /> : <Navigate to="/dashboard" replace />}
-          </PrivateRoute>
-        } 
-      />
-      
-      {/* Admin Panel */}
-      <Route 
-        path="/admin" 
-        element={
-          <AdminRoute>
-            <AdminDashboard />
-          </AdminRoute>
-        } 
-      />
-      
-      {/* Wildcard Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        {/* Public Routes */}
+        <Route 
+          path="/" 
+          element={currentUser ? <Navigate to="/dashboard" replace /> : <LandingPage />} 
+        />
+        <Route 
+          path="/login" 
+          element={currentUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
+        />
+        
+        {/* Onboarding On-demand Route */}
+        <Route 
+          path="/register" 
+          element={
+            <PrivateRoute>
+              {currentUser?.role ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
+            </PrivateRoute>
+          } 
+        />
+        
+        {/* Dashboard Route (resolves dynamically based on role) */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <PrivateRoute>
+              <DashboardRoute />
+            </PrivateRoute>
+          } 
+        />
+        
+        {/* Employer Only: Post Job */}
+        <Route 
+          path="/post-job" 
+          element={
+            <PrivateRoute>
+              {currentUser?.role === 'employer' ? <PostJobPage /> : <Navigate to="/dashboard" replace />}
+            </PrivateRoute>
+          } 
+        />
+        
+        {/* Admin Panel */}
+        <Route 
+          path="/admin" 
+          element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } 
+        />
+        
+        {/* Wildcard Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 };
 

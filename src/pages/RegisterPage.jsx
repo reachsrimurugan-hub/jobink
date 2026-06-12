@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
@@ -17,10 +17,11 @@ const RegisterPage = () => {
   const [area, setArea] = useState('');
   const [businessType, setBusinessType] = useState('Individual'); // For employers
   const [skills, setSkills] = useState([]); // For workers
-  const [availability, setAvailability] = useState(true); // For workers
+  const availability = true; // For workers
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarPhoto, setAadhaarPhoto] = useState('');
   const [profilePhoto, setProfilePhoto] = useState(currentUser?.profilePhotoUrl || '');
+  const [onboardingPhone, setOnboardingPhone] = useState('');
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,6 +60,10 @@ const RegisterPage = () => {
       setError('Please enter your full name.');
       return;
     }
+    if (!currentUser?.phone && onboardingPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
     if (!city || !area) {
       setError('Please select both city and area.');
       return;
@@ -85,7 +90,7 @@ const RegisterPage = () => {
       const profileData = {
         name,
         role,
-        phone: currentUser.phone || '',
+        phone: currentUser.phone || `+91${onboardingPhone}`,
         location: `${city}, ${area}`,
         city,
         area,
@@ -201,6 +206,28 @@ const RegisterPage = () => {
                 required
               />
             </div>
+
+            {/* Mobile Number (if logged in via Google and phone is empty) */}
+            {!currentUser?.phone && (
+              <div>
+                <label htmlFor="regPhone" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                  Mobile Number (for WhatsApp & Direct Contacts)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
+                  <input
+                    id="regPhone"
+                    type="tel"
+                    placeholder="Enter 10-digit number"
+                    value={onboardingPhone}
+                    onChange={(e) => setOnboardingPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                    maxLength={10}
+                    className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
+                    required
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Employer Only: Business/Individual */}
             {role === 'employer' && (

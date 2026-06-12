@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { jobService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
-import { ArrowLeft, CheckCircle, ShieldAlert, Sparkles } from 'lucide-react';
+import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const PostJobPage = () => {

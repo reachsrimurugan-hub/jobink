@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService, reportService, queryService } from '../services/db';
+import { authService, reportService, queryService, disputeService, jobService } from '../services/db';
 import Navbar from '../components/Navbar';
-import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare, ShieldAlert } from 'lucide-react';
 
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
   const [pendingUsers, setPendingUsers] = useState([]);
   const [pendingPhoneChanges, setPendingPhoneChanges] = useState([]);
+  const [pendingPhotoChanges, setPendingPhotoChanges] = useState([]);
   const [pendingReports, setPendingReports] = useState([]);
   const [queries, setQueries] = useState([]);
+  const [pendingDisputes, setPendingDisputes] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState('identity');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,11 +30,30 @@ const AdminDashboard = () => {
       const phoneChanges = await authService.getPendingPhoneChanges();
       setPendingPhoneChanges(phoneChanges);
 
+      const photoChanges = await authService.getPendingPhotoChanges();
+      setPendingPhotoChanges(photoChanges);
+
       const reports = await reportService.getPendingReports();
       setPendingReports(reports);
 
       const userQueries = await queryService.getAllQueries();
       setQueries(userQueries);
+
+      const activeDisputes = await disputeService.getPendingDisputes();
+      const enrichedDisputes = await Promise.all(activeDisputes.map(async (disp) => {
+        const [empDoc, wrkDoc, job] = await Promise.all([
+          authService.getCurrentUser(disp.employerId),
+          authService.getCurrentUser(disp.workerId),
+          jobService.getJobById(disp.jobId)
+        ]);
+        return {
+          ...disp,
+          employer: empDoc || { name: 'Unknown Employer', trustScore: 0, completedJobs: 0, disputesRaised: 0 },
+          worker: wrkDoc || { name: 'Unknown Worker', completedJobs: 0, disputesRaised: 0 },
+          job: job || { title: 'Unknown Job', payment: 0, status: 'unknown' }
+        };
+      }));
+      setPendingDisputes(enrichedDisputes);
       
       setLoading(false);
     } catch (err) {
@@ -77,6 +98,32 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error(err);
       setError('Failed to resolve report.');
+      setLoading(false);
+    }
+  };
+
+  const handleResolveDispute = async (disputeId, resolution) => {
+    setError('');
+    setSuccess('');
+    let confirmMsg = "Are you sure you want to resolve this dispute?";
+    if (resolution === 'favor_worker') {
+      confirmMsg = "Resolve in worker's favor? This will decrease employer trust score by 1, and increment worker completed jobs & trust score.";
+    } else if (resolution === 'favor_employer') {
+      confirmMsg = "Resolve in employer's favor? This will decrease worker trust score by 1 (false dispute), and increment employer trust score.";
+    } else {
+      confirmMsg = "Close dispute neutrally? No trust score changes will be applied.";
+    }
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setLoading(true);
+      await disputeService.resolveDispute(disputeId, resolution);
+      setSuccess(`Dispute resolved successfully (${resolution})!`);
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to resolve dispute.');
       setLoading(false);
     }
   };
@@ -145,6 +192,38 @@ const AdminDashboard = () => {
     }
   };
 
+  const handlePhotoApprove = async (requestId) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.updatePhotoChangeStatus(requestId, 'approved');
+      setSuccess('Profile photo change request approved successfully!');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to approve profile photo change request.');
+      setLoading(false);
+    }
+  };
+
+  const handlePhotoReject = async (requestId) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.updatePhotoChangeStatus(requestId, 'rejected');
+      setSuccess('Profile photo change request rejected.');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to reject profile photo change request.');
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
       <Navbar activeTab="" />
@@ -206,6 +285,17 @@ const AdminDashboard = () => {
           </button>
           <button
             type="button"
+            onClick={() => setActiveSubTab('profilePhotos')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'profilePhotos'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            🖼️ Profile Photos ({pendingPhotoChanges.length})
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveSubTab('reports')}
             className={`pb-3 text-sm font-bold border-b-2 transition-all ${
               activeSubTab === 'reports'
@@ -225,6 +315,17 @@ const AdminDashboard = () => {
             }`}
           >
             💬 User Queries ({queries.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('disputes')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'disputes'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            🛡️ Disputes ({pendingDisputes.length})
           </button>
         </div>
 
@@ -518,6 +619,204 @@ const AdminDashboard = () => {
                       
                       <div className="text-xs text-slate-700 bg-slate-50 border border-slate-100/50 p-3.5 rounded-xl leading-relaxed whitespace-pre-wrap">
                         {q.queryText}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 5: Disputes Queue */}
+        {activeSubTab === 'disputes' && (
+          <div>
+            {loading && pendingDisputes.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : pendingDisputes.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">No Pending Disputes!</p>
+                <p className="text-xs text-slate-400">All payment disputes have been resolved.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  Payment Disputes Under Audit ({pendingDisputes.length})
+                </h3>
+                
+                <div className="flex flex-col gap-5">
+                  {pendingDisputes.map((disp) => (
+                    <div key={disp.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                      {/* Top Header Row */}
+                      <div className="flex justify-between items-start border-b border-slate-100 pb-3 flex-wrap gap-2">
+                        <div>
+                          <span className="bg-red-50 text-red-750 border border-red-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                            Disputed
+                          </span>
+                          <h4 className="font-extrabold text-slate-800 text-sm mt-1">{disp.job?.title || 'Job Title'}</h4>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">Job ID: {disp.jobId} | Dispute ID: {disp.id}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Expected Payment</span>
+                          <span className="text-sm font-extrabold text-slate-900">₹{disp.job?.payment || disp.job?.amount || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      {/* Info Sections: Employer vs Worker */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-slate-100 pb-3 text-xs">
+                        {/* Employer Info */}
+                        <div className="space-y-2 border-r border-slate-105 pr-2">
+                          <h5 className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">Employer Details</h5>
+                          <p className="font-bold text-slate-850">{disp.employer?.name || 'Name not loaded'}</p>
+                          <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-500">
+                            <div>Trust Score: <strong className="text-slate-700">{disp.employer?.trustScore ?? 0}</strong></div>
+                            <div>Completed: <strong className="text-slate-700">{disp.employer?.completedJobs ?? 0}</strong></div>
+                            <div>Disputes Count: <strong className="text-red-650">{disp.employer?.disputesRaised ?? 0}</strong></div>
+                          </div>
+                        </div>
+
+                        {/* Worker Info */}
+                        <div className="space-y-2">
+                          <h5 className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">Worker Details</h5>
+                          <p className="font-bold text-slate-850">{disp.worker?.name || 'Name not loaded'}</p>
+                          <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-500">
+                            <div>Trust Score: <strong className="text-slate-700">{disp.worker?.trustScore ?? 0}</strong></div>
+                            <div>Completed: <strong className="text-slate-700">{disp.worker?.completedJobs ?? 0}</strong></div>
+                            <div>Disputes Raised: <strong className="text-red-650">{disp.worker?.disputesRaised ?? 0}</strong></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Payment UPI Details */}
+                      <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs space-y-2">
+                        <h5 className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">Payment Details (Entered by Employer)</h5>
+                        <div className="grid grid-cols-2 gap-2 leading-relaxed text-slate-600">
+                          <div>Amount Transferred: <strong className="text-slate-800 font-bold">₹{disp.job?.paymentAmount || 'N/A'}</strong></div>
+                          <div>UPI Transaction ID: <strong className="text-slate-800 font-mono font-bold tracking-wider">{disp.job?.transactionReferenceId || 'N/A'}</strong></div>
+                          <div className="col-span-2">Paid Timestamp: <span className="font-semibold">{disp.job?.paidAt ? new Date(disp.job.paidAt).toLocaleString('en-IN') : 'N/A'}</span></div>
+                        </div>
+                      </div>
+
+                      {/* Dispute Statements: Worker Claim & Employer Response */}
+                      <div className="space-y-3 pt-1">
+                        <div>
+                          <span className="block text-[9px] uppercase font-bold text-red-600 mb-1">Worker Claim (Reason: {disp.reason})</span>
+                          <p className="bg-red-50 border border-red-100 p-3 rounded-lg text-xs italic text-slate-700 font-medium">
+                            "{disp.workerComment || 'No comments provided'}"
+                          </p>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] uppercase font-bold text-indigo-600 mb-1">Employer Response/Proof</span>
+                          <p className="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-xs italic text-slate-700 font-medium">
+                            "{disp.employerResponse || 'Awaiting employer response...'}"
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Admin Resolutions Actions */}
+                      <div className="border-t border-slate-100 pt-4 flex gap-2 flex-wrap md:flex-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleResolveDispute(disp.id, 'favor_worker')}
+                          disabled={loading}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm touch-target cursor-pointer"
+                        >
+                          Resolve in Favor of Worker
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleResolveDispute(disp.id, 'favor_employer')}
+                          disabled={loading}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm touch-target cursor-pointer"
+                        >
+                          Resolve in Favor of Employer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleResolveDispute(disp.id, 'close')}
+                          disabled={loading}
+                          className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center border border-slate-200 touch-target cursor-pointer"
+                        >
+                          Close Dispute (No Penalty)
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 6: Profile Photo Change Requests Queue */}
+        {activeSubTab === 'profilePhotos' && (
+          <div>
+            {loading && pendingPhotoChanges.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : pendingPhotoChanges.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">Photo Queue is Empty!</p>
+                <p className="text-xs text-slate-400">All profile photo update requests have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  Pending Photo Change Requests ({pendingPhotoChanges.length})
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {pendingPhotoChanges.map((req) => (
+                    <div key={req.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-extrabold text-slate-800 text-base leading-snug">{req.userName}</h4>
+                          <span className="text-[10px] text-slate-400 font-semibold">User ID: {req.userId}</span>
+                        </div>
+                        <div className="text-xs text-slate-600 flex flex-wrap gap-6 items-center pt-3 border-t border-slate-100">
+                          <div className="text-center">
+                            <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Current Photo</span>
+                            {req.oldPhotoUrl ? (
+                              <img src={req.oldPhotoUrl} alt="Old profile" className="w-14 h-14 rounded-full object-cover border border-slate-200 mx-auto" />
+                            ) : (
+                              <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-[10px] mx-auto">None</div>
+                            )}
+                          </div>
+                          <div className="text-slate-300 font-bold text-lg">→</div>
+                          <div className="text-center">
+                            <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Requested Photo</span>
+                            <img src={req.newPhotoUrl} alt="New profile" className="w-14 h-14 rounded-full object-cover border border-slate-200 mx-auto" />
+                          </div>
+                          <div className="ml-auto text-[10px] text-slate-400 self-end">
+                            Requested: {new Date(req.createdAt).toLocaleDateString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => handlePhotoReject(req.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100 touch-target cursor-pointer"
+                        >
+                          <XCircle size={15} />
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePhotoApprove(req.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
+                        >
+                          <CheckCircle size={15} />
+                          Approve
+                        </button>
                       </div>
                     </div>
                   ))}

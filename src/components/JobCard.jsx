@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, Clock, IndianRupee, Users, BadgeCheck, Phone, MessageSquare, Briefcase, MoreVertical } from 'lucide-react';
+import { MapPin, Clock, IndianRupee, Users, BadgeCheck, Phone, MessageSquare, Briefcase, MoreVertical, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { authService } from '../services/db';
+import JobProgressTracker from './JobProgressTracker';
 
 const JobCard = ({ 
   job, 
@@ -14,7 +15,9 @@ const JobCard = ({
   onMarkCompleted,
   onDelete,
   onViewEmployerProfile,
-  onMarkPaid
+  onMarkPaid,
+  onRespondToDispute,
+  hideProgress
 }) => {
   const { t, i18n } = useTranslation();
   const isTamil = i18n.language?.startsWith('ta');
@@ -85,12 +88,38 @@ const JobCard = ({
           </span>
         );
       case 'booked':
+      case 'ACCEPTED':
         return (
           <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
-            {t('bookedFilled')}
+            Accepted
+          </span>
+        );
+      case 'WORK_STARTED':
+        return (
+          <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+            Work Started
+          </span>
+        );
+      case 'WORK_COMPLETED':
+        return (
+          <span className="bg-cyan-50 text-cyan-700 border border-cyan-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+            Work Completed
+          </span>
+        );
+      case 'EMPLOYER_MARKED_PAID':
+        return (
+          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+            Employer Paid
+          </span>
+        );
+      case 'DISPUTED':
+        return (
+          <span className="bg-red-50 text-red-700 border border-red-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1">
+            <ShieldAlert size={10} /> Disputed
           </span>
         );
       case 'completed':
+      case 'COMPLETED':
         return (
           <span className="bg-[#e6f4ea] text-[#137333] border border-[#ceead6] text-[10px] font-bold px-2.5 py-0.5 rounded-md">
             {t('completed')}
@@ -197,6 +226,35 @@ const JobCard = ({
 
             <p className="text-slate-500 text-xs mt-1.5 leading-relaxed break-words">{description}</p>
 
+            {status !== 'open' && !hideProgress && (
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <JobProgressTracker status={status} />
+              </div>
+            )}
+
+            {status === 'DISPUTED' && (
+              <div className="mt-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-800 space-y-2 text-left animate-in slide-in-from-bottom duration-200">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <ShieldAlert size={14} className="text-red-650" />
+                  <span>Dispute Status: Under Admin Review</span>
+                </div>
+                {job.paymentAmount && (
+                  <p className="text-[11px] font-semibold text-slate-655">
+                    Disputed Amount: <strong>₹{job.paymentAmount}</strong> (Ref ID: <span className="font-mono">{job.transactionReferenceId}</span>)
+                  </p>
+                )}
+                {userRole === 'employer' && onRespondToDispute && (
+                  <button
+                    type="button"
+                    onClick={() => onRespondToDispute(job.id)}
+                    className="mt-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3.5 rounded-xl text-[10px] uppercase tracking-wide transition-colors cursor-pointer"
+                  >
+                    Respond to Dispute
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 py-4 border-t border-slate-100 mt-5 pt-4">
               {/* Column 1: Payment */}
               <div className="flex items-center gap-2.5">
@@ -248,13 +306,21 @@ const JobCard = ({
             </div>
 
             {/* Direct UPI Payment Section (Employer side) */}
-            {status === 'completed' && userRole === 'employer' && (
+            {(status === 'WORK_COMPLETED' || status === 'EMPLOYER_MARKED_PAID' || status === 'DISPUTED' || status === 'COMPLETED' || status === 'completed') && userRole === 'employer' && (
               <div className="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs space-y-3.5 shadow-sm text-left animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Direct UPI Payment</span>
-                  {job.paymentStatus === 'paid' ? (
+                  {status === 'COMPLETED' || status === 'completed' ? (
                     <span className="bg-green-100 text-green-800 border border-green-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
-                      Paid
+                      Paid & Verified
+                    </span>
+                  ) : status === 'EMPLOYER_MARKED_PAID' ? (
+                    <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                      Awaiting Worker Verify
+                    </span>
+                  ) : status === 'DISPUTED' ? (
+                    <span className="bg-red-100 text-red-800 border border-red-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                      Payment Disputed
                     </span>
                   ) : (
                     <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
@@ -299,14 +365,28 @@ const JobCard = ({
                           </div>
                         </div>
 
+                        {/* Payment Info Display if already paid/marked paid */}
+                        {(status === 'EMPLOYER_MARKED_PAID' || status === 'DISPUTED' || status === 'COMPLETED' || status === 'completed') && job.paymentAmount && (
+                          <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-3 text-[11px]">
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Amount Paid</span>
+                              <span className="font-extrabold text-slate-800">₹{job.paymentAmount}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">UPI Ref ID</span>
+                              <span className="font-mono font-bold text-slate-850 break-all">{job.transactionReferenceId}</span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between pt-1">
                           <div>
-                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Amount</span>
+                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Expected Job Amount</span>
                             <span className="font-extrabold text-slate-900 text-sm">₹{payment}</span>
                           </div>
 
                           <div className="flex gap-2 shrink-0">
-                            {job.paymentStatus !== 'paid' ? (
+                            {status === 'WORK_COMPLETED' ? (
                               <button
                                 type="button"
                                 onClick={() => onMarkPaid && onMarkPaid(job.id, targetWorkerId, title)}
@@ -319,7 +399,7 @@ const JobCard = ({
                                 disabled
                                 className="bg-slate-100 text-slate-400 border border-slate-200 font-bold px-3 py-2 rounded-xl text-xs cursor-not-allowed"
                               >
-                                Mark as Paid
+                                {status === 'EMPLOYER_MARKED_PAID' ? 'Awaiting Confirm' : status === 'DISPUTED' ? 'Disputed' : 'Paid'}
                               </button>
                             )}
                           </div>

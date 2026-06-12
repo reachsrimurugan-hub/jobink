@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,7 +17,18 @@ const firebaseConfig = {
 // Initialize Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+const functions = getFunctions(app);
+
+// Connect to Functions emulator if emulators are active in development
+if (window.location.hostname === 'localhost' && import.meta.env.VITE_USE_EMULATORS === 'true') {
+  connectFunctionsEmulator(functions, 'localhost', 5001);
+}
+
 const googleProvider = new GoogleAuthProvider();
 
 // Initialize Analytics conditionally
@@ -34,4 +46,4 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-export { app, auth, db, googleProvider, analytics };
+export { app, auth, db, functions, googleProvider, analytics };

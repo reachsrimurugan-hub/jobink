@@ -1,0 +1,151 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Checks if user is logged in
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: Get user role
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Helper: Checks if user is verified
+    function isVerified() {
+      return getUserData().verified == true;
+    }
+
+    // --- USERS COLLECTION ---
+    match /users/{userId} {
+      allow read: if isLoggedIn();
+      // Allow onboarding creation or profile updates by the user themselves
+      allow write: if isLoggedIn() && request.auth.uid == userId;
+    }
+
+    // --- JOBS COLLECTION ---
+    match /jobs/{jobId} {
+      allow read: if isLoggedIn();
+      
+      // Only verified employers can create jobs
+      allow create: if isLoggedIn() && isVerified() && getUserData().role == 'employer';
+      
+      // Update rule: Only assigned parties can update fields, but status updates MUST be blocked.
+      allow update: if isLoggedIn() && (
+        resource.data.employerId == request.auth.uid || 
+        resource.data.workerId == request.auth.uid || 
+        (resource.data.selectedWorkers != null && request.auth.uid in resource.data.selectedWorkers)
+      ) && (
+        // Protect status field from direct client modification!
+        request.resource.data.status == resource.data.status
+      );
+
+      // Delete rule: Only employer can delete, and only if job is still open.
+      allow delete: if isLoggedIn() && resource.data.employerId == request.auth.uid && resource.data.status == 'open';
+
+      // Nested activity logs
+      match /activityLogs/{logId} {
+        allow read: if isLoggedIn();
+        allow write: if false; // Only Cloud Functions can write activity logs
+      }
+    }
+
+    // --- APPLICATIONS COLLECTION ---
+    match /applications/{appId} {
+      allow read: if isLoggedIn();
+      // Only worker can apply (create application)
+      allow create: if isLoggedIn() && getUserData().role == 'worker' && isVerified();
+      // Both employer (select/reject) and worker (cancel) can update application
+      allow update: if isLoggedIn() && (
+        request.auth.uid == resource.data.workerId ||
+        get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.employerId == request.auth.uid
+      );
+      allow delete: if isLoggedIn() && request.auth.uid == resource.data.workerId;
+    }
+
+    // --- DISPUTES COLLECTION ---
+    match /disputes/{disputeId} {
+      // Involved worker, employer, or admin can read disputes
+      allow read: if isLoggedIn() && (
+        resource.data.employerId == request.auth.uid || 
+        resource.data.workerId == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      // Client cannot write directly. Handled via Cloud Functions.
+      allow write: if false;
+    }
+
+    // --- NOTIFICATIONS COLLECTION ---
+    match /notifications/{notifId} {
+      // Users can read their own notifications, or admins can read administrative notifications
+      allow read: if isLoggedIn() && (
+        resource.data.userId == request.auth.uid || 
+        (resource.data.userId == 'admin' && getUserData().role == 'admin')
+      );
+      // Allow marking read by owner
+      allow update: if isLoggedIn() && resource.data.userId == request.auth.uid && request.resource.data.read == true;
+      // Allow creating notifications from frontend (mock alerts, etc.)
+      allow create: if isLoggedIn();
+      allow delete: if isLoggedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // --- REVIEWS COLLECTION ---
+    match /reviews/{reviewId} {
+      allow read: if isLoggedIn();
+      // Workers and employers can submit reviews
+      allow create: if isLoggedIn() && request.auth.uid == request.resource.data.reviewerId;
+      allow update, delete: if false;
+    }
+
+    // --- REPORTS COLLECTION ---
+    match /reports/{reportId} {
+      allow read: if isLoggedIn() && (
+        resource.data.reporterId == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      // Allow submitting reports
+      allow create: if isLoggedIn() && request.auth.uid == request.resource.data.reporterId;
+      // Admin can update report status
+      allow update: if isLoggedIn() && getUserData().role == 'admin';
+      allow delete: if false;
+    }
+
+    // --- QUERIES COLLECTION ---
+    match /queries/{queryId} {
+      allow read: if isLoggedIn() && (
+        resource.data.userId == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      allow create: if isLoggedIn() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // --- PHONE CHANGE REQUESTS COLLECTION ---
+    match /phoneChangeRequests/{reqId} {
+      allow read: if isLoggedIn() && (
+        resource.data.uid == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      allow write: if isLoggedIn() && (
+        request.auth.uid == reqId || 
+        getUserData().role == 'admin'
+      );
+    }
+
+    // --- PHOTO CHANGE REQUESTS COLLECTION ---
+    match /photoChangeRequests/{reqId} {
+      allow read: if isLoggedIn() && (
+        resource.data.userId == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isLoggedIn() && (
+        resource.data.userId == request.auth.uid || 
+        getUserData().role == 'admin'
+      );
+      allow delete: if isLoggedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

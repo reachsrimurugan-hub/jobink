@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
@@ -10,7 +10,7 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
 import Modal from '../components/Modal';
-import { Sparkles, MapPin, Briefcase, Bell, User, CheckCircle, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal } from 'lucide-react';
+import { MapPin, Briefcase, Bell, User, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const WorkerDashboard = () => {
@@ -52,12 +52,20 @@ const WorkerDashboard = () => {
   const [availLoading, setAvailLoading] = useState(false);
 
   // Profile edit states
-  const [editPhoto, setEditPhoto] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [profileSuccess, setProfileSuccess] = useState('');
   const [profileError, setProfileError] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+
+  // Dispute Modal States
+  const [isDisputeOpen, setIsDisputeOpen] = useState(false);
+  const [disputeJobId, setDisputeJobId] = useState('');
+  const [disputeReason, setDisputeReason] = useState('No payment received');
+  const [disputeComment, setDisputeComment] = useState('');
+  const [disputeLoading, setDisputeLoading] = useState(false);
+  const [disputeError, setDisputeError] = useState('');
 
   // Phone Change States
   const [newPhone, setNewPhone] = useState('');
@@ -68,22 +76,41 @@ const WorkerDashboard = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [changeOtp, setChangeOtp] = useState('');
 
+  // Photo Change States
+  const [photoRequest, setPhotoRequest] = useState(null);
+  const [requestedPhoto, setRequestedPhoto] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const [photoSuccess, setPhotoSuccess] = useState('');
+
+  // Re-verification states
+  const [reAadhaarNumber, setReAadhaarNumber] = useState('');
+  const [reAadhaarPhoto, setReAadhaarPhoto] = useState('');
+  const [reVerifLoading, setReVerifLoading] = useState(false);
+  const [reVerifSuccess, setReVerifSuccess] = useState('');
+  const [reVerifError, setReVerifError] = useState('');
+
   // Sync profile details state from currentUser
   useEffect(() => {
     if (currentUser) {
-      setEditPhoto(currentUser.profilePhotoUrl || '');
-      setEditDescription(currentUser.description || '');
+      const timer = setTimeout(() => {
+        setEditDescription(currentUser.description || '');
+        setEditPhone(currentUser.phone || '');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [currentUser]);
 
-  const loadPhoneChangeRequest = async () => {
+  const loadRequests = useCallback(async () => {
     try {
-      const req = await authService.getPhoneChangeRequestForUser(currentUser.uid);
-      setPhoneRequest(req);
+      const phoneReq = await authService.getPhoneChangeRequestForUser(currentUser.uid);
+      setPhoneRequest(phoneReq);
+      const photoReq = await authService.getPhotoChangeRequestForUser(currentUser.uid);
+      setPhotoRequest(photoReq);
     } catch (err) {
-      console.error("Failed to load phone change request:", err);
+      console.error("Failed to load requests:", err);
     }
-  };
+  }, [currentUser]);
 
   const handleFileChange = (e, setFileState) => {
     const file = e.target.files[0];
@@ -101,17 +128,100 @@ const WorkerDashboard = () => {
     setProfileError('');
     setProfileSuccess('');
     setProfileSaving(true);
+
+    const profileData = {
+      description: editDescription
+    };
+
+    if (!currentUser.phone) {
+      const sanitized = editPhone.replace(/[^0-9]/g, '');
+      if (sanitized.length !== 10) {
+        setProfileError('Please enter a valid 10-digit mobile number.');
+        setProfileSaving(false);
+        return;
+      }
+      profileData.phone = `+91${sanitized}`;
+    }
+
     try {
-      await updateProfile({
-        profilePhotoUrl: editPhoto || currentUser.profilePhotoUrl,
-        description: editDescription
-      });
+      await updateProfile(profileData);
       setProfileSuccess('Profile updated successfully!');
       setProfileSaving(false);
     } catch (err) {
       console.error(err);
       setProfileError('Failed to save profile. Please try again.');
       setProfileSaving(false);
+    }
+  };
+
+  const handleRequestPhotoChange = async () => {
+    if (!requestedPhoto) return;
+    setPhotoError('');
+    setPhotoSuccess('');
+    setPhotoLoading(true);
+    try {
+      await authService.requestPhotoChange(
+        currentUser.uid,
+        currentUser.name || 'User',
+        currentUser.profilePhotoUrl || '',
+        requestedPhoto
+      );
+      setPhotoSuccess('Photo change request submitted to Admin successfully.');
+      setRequestedPhoto('');
+      await loadRequests();
+      setPhotoLoading(false);
+    } catch (err) {
+      console.error(err);
+      setPhotoError('Failed to request photo change.');
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleResetPhotoRequest = async () => {
+    setPhotoLoading(true);
+    try {
+      await authService.deletePhotoChangeRequest(currentUser.uid);
+      setPhotoRequest(null);
+      setRequestedPhoto('');
+      setPhotoLoading(false);
+    } catch (err) {
+      console.error(err);
+      setPhotoError('Failed to reset request.');
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleReSubmitVerification = async (e) => {
+    e.preventDefault();
+    setReVerifError('');
+    setReVerifSuccess('');
+    
+    if (reAadhaarNumber.length !== 12 || !/^[0-9]+$/.test(reAadhaarNumber)) {
+      setReVerifError('Aadhaar number must be exactly 12 digits.');
+      return;
+    }
+    if (!reAadhaarPhoto) {
+      setReVerifError('Please select or upload your Aadhaar photo.');
+      return;
+    }
+
+    setReVerifLoading(true);
+    try {
+      await authService.saveUserProfile(currentUser.uid, {
+        aadhaarNumber: reAadhaarNumber,
+        aadhaarPhotoUrl: reAadhaarPhoto,
+        verificationStatus: 'pending',
+        verified: false
+      });
+      setReVerifSuccess('Identity verification re-submitted successfully!');
+      setReAadhaarNumber('');
+      setReAadhaarPhoto('');
+      await reloadProfile();
+      setReVerifLoading(false);
+    } catch (err) {
+      console.error(err);
+      setReVerifError('Failed to re-submit identity verification.');
+      setReVerifLoading(false);
     }
   };
 
@@ -181,7 +291,7 @@ const WorkerDashboard = () => {
       
       // Reload profile
       await reloadProfile();
-      await loadPhoneChangeRequest();
+      await loadRequests();
       setPhoneLoading(false);
     } catch (err) {
       console.error(err);
@@ -210,7 +320,7 @@ const WorkerDashboard = () => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   // Load jobs based on filters
-  const loadJobs = async () => {
+  const loadJobs = useCallback(async () => {
     try {
       setLoading(true);
       const data = await jobService.getJobs(filterCity, filterArea);
@@ -220,27 +330,27 @@ const WorkerDashboard = () => {
       console.error(err);
       setLoading(false);
     }
-  };
+  }, [filterCity, filterArea]);
 
   // Load worker applications
-  const loadApplications = async () => {
+  const loadApplications = useCallback(async () => {
     try {
       const data = await applicationService.getWorkerApplications(currentUser.uid);
       setMyApplications(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [currentUser]);
 
   // Load worker reviews
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
     try {
       const data = await reviewService.getUserReviews(currentUser.uid);
       setReviews(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [currentUser]);
 
   // Real-time listener for notifications
   useEffect(() => {
@@ -257,16 +367,19 @@ const WorkerDashboard = () => {
 
   // Load initial data and reload on tab switches
   useEffect(() => {
-    if (activeTab === 'home') {
-      loadJobs();
-    } else if (activeTab === 'applications') {
-      loadApplications();
-    } else if (activeTab === 'profile') {
-      loadReviews();
-      reloadProfile(); // Reload user stats (like verification and rating)
-      loadPhoneChangeRequest();
-    }
-  }, [activeTab, filterCity, filterArea]);
+    const timer = setTimeout(() => {
+      if (activeTab === 'home') {
+        loadJobs();
+      } else if (activeTab === 'applications') {
+        loadApplications();
+      } else if (activeTab === 'profile') {
+        loadReviews();
+        reloadProfile();
+        loadRequests();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeTab, filterCity, filterArea, loadJobs, loadApplications, loadReviews, reloadProfile, loadRequests]);
 
   // Handle availability toggle
   const handleAvailabilityToggle = async () => {
@@ -328,6 +441,46 @@ const WorkerDashboard = () => {
       setLoading(false);
     } catch (err) {
       console.error(err);
+      setLoading(false);
+    }
+  };
+
+  // Start Job Work
+  const handleStartWork = async (jobId) => {
+    try {
+      setLoading(true);
+      await jobService.startJobWork(jobId);
+      await loadApplications();
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to start job:", err);
+      setLoading(false);
+    }
+  };
+
+  // Mark Work Completed
+  const handleMarkWorkCompleted = async (jobId) => {
+    try {
+      setLoading(true);
+      await jobService.markJobWorkCompleted(jobId);
+      await loadApplications();
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to mark work completed:", err);
+      setLoading(false);
+    }
+  };
+
+  // Confirm Payment
+  const handleConfirmPayment = async (jobId, received, reason = '', comment = '') => {
+    try {
+      setLoading(true);
+      await jobService.confirmPayment(jobId, received, reason, comment);
+      await loadApplications();
+      setLoading(false);
+      setIsDisputeOpen(false);
+    } catch (err) {
+      console.error("Failed to confirm payment:", err);
       setLoading(false);
     }
   };
@@ -730,54 +883,120 @@ const WorkerDashboard = () => {
                         )}
                       </div>
 
-                      {/* Selected actions (Active Jobs) */}
-                      {app.status === 'selected' && app.jobStatus !== 'completed' && (
-                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
+                      {/* Selected actions (Workflow Integration) */}
+                      {app.status === 'selected' && (
+                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-3">
                           <span className="text-[11px] font-bold text-green-600 block">✓ {t('youHaveBeenSelected')}</span>
-                          <div className="flex gap-2">
-                            <a 
-                              href={`tel:${app.employerPhone || app.workerPhone}`}
-                              className="flex-1 text-center bg-slate-100 border border-slate-200 text-slate-700 font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
-                            >
-                              {t('callEmployer')}
-                            </a>
-                            <a 
-                              href={`https://wa.me/${(app.employerPhone || app.workerPhone)?.replace(/[^0-9]/g, '')}?text=Hello, I am ready to work for "${app.jobTitle}"!`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
-                            >
-                              {t('whatsapp')}
-                            </a>
-                          </div>
-                        </div>
-                      )}
+                          
+                          {/* Stepper helper buttons */}
+                          <div className="flex flex-col gap-2">
+                            {(app.jobStatus === 'ACCEPTED' || app.jobStatus === 'booked') && (
+                              <button
+                                type="button"
+                                onClick={() => handleStartWork(app.jobId)}
+                                className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs shadow-sm cursor-pointer"
+                              >
+                                Start Work
+                              </button>
+                            )}
 
-                      {/* Selected actions (Completed Jobs) */}
-                      {app.status === 'selected' && app.jobStatus === 'completed' && (
-                        <div className="border-t border-slate-100 pt-3 flex flex-col gap-2">
-                          <div className="flex justify-between items-center bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs mb-1">
-                            <span className="font-semibold text-slate-500">Payment Status:</span>
-                            {app.paymentStatus === 'paid' ? (
-                              <span className="bg-green-100 text-green-800 border border-green-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
-                                Paid
-                              </span>
-                            ) : (
-                              <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
-                                Pending Payment
-                              </span>
+                            {app.jobStatus === 'WORK_STARTED' && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkWorkCompleted(app.jobId)}
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl text-xs shadow-sm cursor-pointer"
+                              >
+                                Mark Work Completed
+                              </button>
+                            )}
+
+                            {app.jobStatus === 'WORK_COMPLETED' && (
+                              <div className="bg-slate-50 border border-slate-200 text-slate-500 text-xs font-semibold py-2.5 px-3 rounded-xl text-center">
+                                Work completed! Waiting for employer payment.
+                              </div>
+                            )}
+
+                            {/* Worker Verification Screen */}
+                            {app.jobStatus === 'EMPLOYER_MARKED_PAID' && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                                <h5 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-200 pb-1.5">Verify UPI Payment</h5>
+                                <div className="grid grid-cols-2 gap-2 text-xs leading-normal">
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Amount Paid</span>
+                                    <span className="font-extrabold text-slate-800 text-sm">₹{app.paymentAmount || app.jobPayment}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Transaction ID</span>
+                                    <span className="font-mono font-bold text-slate-800">{app.transactionReferenceId || 'N/A'}</span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 pt-1 border-t border-slate-200/50">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDisputeJobId(app.jobId);
+                                      setIsDisputeOpen(true);
+                                    }}
+                                    className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-150 font-bold py-2 rounded-xl text-xs cursor-pointer text-center"
+                                  >
+                                    Not Received
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleConfirmPayment(app.jobId, true)}
+                                    className="flex-1 bg-green-650 hover:bg-green-750 text-white font-bold py-2 rounded-xl text-xs shadow-sm cursor-pointer text-center"
+                                  >
+                                    Received
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {app.jobStatus === 'DISPUTED' && (
+                              <div className="bg-red-50 border border-red-200 text-red-800 text-xs font-semibold py-2.5 px-3 rounded-xl text-center flex items-center justify-center gap-1.5">
+                                <ShieldAlert size={14} className="text-red-600 shrink-0" />
+                                <span>Dispute Raised: Awaiting Admin Resolution</span>
+                              </div>
+                            )}
+
+                            {(app.jobStatus === 'COMPLETED' || app.jobStatus === 'completed') && (
+                              <div className="space-y-2">
+                                <div className="bg-green-50 border border-green-200 text-green-800 text-xs font-bold py-2.5 px-3 rounded-xl text-center">
+                                  ✓ Job completed & payment verified!
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewEmployerProfile(app.employerId)}
+                                  className="w-full text-center bg-primary/10 hover:bg-primary/20 text-primary font-bold py-2 rounded-lg text-xs transition-colors touch-target flex items-center justify-center gap-1.5 cursor-pointer"
+                                >
+                                  <Star size={14} className="fill-primary" />
+                                  {t('rateReviewEmployer')}
+                                </button>
+                              </div>
                             )}
                           </div>
 
-                          <span className="text-[11px] font-bold text-slate-500 block">{t('workCompletedFeedback')}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleViewEmployerProfile(app.employerId)}
-                            className="w-full text-center bg-primary/10 hover:bg-primary/20 text-primary font-bold py-2 rounded-lg text-xs transition-colors touch-target flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Star size={14} className="fill-primary" />
-                            {t('rateReviewEmployer')}
-                          </button>
+                          {/* Contact buttons */}
+                          {app.jobStatus !== 'COMPLETED' && app.jobStatus !== 'completed' && (
+                            <div className="flex gap-2">
+                              <a 
+                                href={`tel:${app.employerPhone}`} 
+                                className="flex-1 text-center bg-slate-100 border border-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 touch-target"
+                              >
+                                <Phone size={14} />
+                                {t('callEmployer')}
+                              </a>
+                              <a 
+                                href={`https://wa.me/${app.employerPhone?.replace(/[^0-9]/g, '')}?text=Hello, I am ready to work for "${app.jobTitle}"!`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 touch-target"
+                              >
+                                <MessageSquare size={14} />
+                                {t('whatsapp')}
+                              </a>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -827,6 +1046,83 @@ const WorkerDashboard = () => {
           {/* TAB 4: Profile & Reviews */}
           {activeTab === 'profile' && (
             <div className="flex flex-col gap-6 text-left">
+              {currentUser.verificationStatus === 'rejected' && (
+                <div className="bg-red-50/50 border border-red-200 rounded-xl p-5 shadow-sm space-y-4">
+                  <h4 className="font-extrabold text-red-800 text-sm flex items-center gap-1.5">
+                    <ShieldAlert size={18} />
+                    Re-Submit Identity Verification (Aadhaar)
+                  </h4>
+                  <p className="text-slate-650 text-xs leading-relaxed">
+                    Your previous identity verification was rejected by the admin. Please upload a clear photo of your Aadhaar card and verify your 12-digit Aadhaar number to request re-approval.
+                  </p>
+                  
+                  {reVerifError && (
+                    <div className="bg-red-100 text-red-800 text-xs font-semibold p-2.5 rounded border border-red-200">
+                      {reVerifError}
+                    </div>
+                  )}
+                  {reVerifSuccess && (
+                    <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                      {reVerifSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2.5">
+                      <div>
+                        <label htmlFor="reAadhaar" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          12-Digit Aadhaar Number
+                        </label>
+                        <input
+                          id="reAadhaar"
+                          type="text"
+                          placeholder="1234 5678 9012"
+                          value={reAadhaarNumber}
+                          onChange={(e) => setReAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
+                          maxLength={12}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                          required
+                        />
+                      </div>
+                      
+                      <button
+                        type="submit"
+                        disabled={reVerifLoading}
+                        className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-auto"
+                      >
+                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Aadhaar Info'}
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                        Upload Aadhaar Card Photo
+                      </label>
+                      <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileChange(e, setReAadhaarPhoto)}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          required={!reAadhaarPhoto}
+                        />
+                        {reAadhaarPhoto ? (
+                          <div className="text-center w-full">
+                            <img src={reAadhaarPhoto} alt="Re-Aadhaar preview" className="max-h-16 mx-auto rounded border border-slate-200 mb-0.5" />
+                            <span className="text-[9px] text-green-600 font-semibold block">✓ Aadhaar Card Uploaded</span>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-semibold text-slate-500">Select Aadhaar Image</span>
+                            <span className="text-[9px] text-slate-400">PNG or JPG formats</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              )}
+
               {/* User Bio Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
                 <img 
@@ -844,10 +1140,10 @@ const WorkerDashboard = () => {
                         setProfileError('');
                         setIsEditProfileOpen(true);
                       }}
-                      className="text-[10px] font-bold text-primary hover:text-primary-dark flex items-center gap-1 bg-primary/5 hover:bg-primary/10 border border-primary/15 px-2 py-0.5 rounded transition-colors touch-target cursor-pointer"
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
                     >
-                      <Edit3 size={11} />
-                      {t('editProfile')}
+                      <Edit3 size={13} className="text-slate-400" />
+                      <span>{t('editProfile')}</span>
                     </button>
                   </div>
                   <span className="text-xs text-slate-500 font-mono block mt-1">{currentUser.phone}</span>
@@ -955,34 +1251,34 @@ const WorkerDashboard = () => {
                     disabled
                     className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-450 cursor-not-allowed"
                   />
-                  <span className="text-[9px] text-red-500 font-bold mt-1 block">
-                    {t('blockedNameWarning')}
+                  <span className="text-[9px] text-red-500 font-bold mt-1 flex items-center gap-1.5">
+                    <ShieldAlert size={10} className="shrink-0" />
+                    <span>{t('blockedNameWarning')}</span>
                   </span>
                 </div>
               </div>
 
-              {/* Profile Photo File Upload */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
-                  {t('updateProfilePhoto')}
-                </label>
-                <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileChange(e, setEditPhoto)}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                  {editPhoto ? (
-                    <div className="text-center w-full">
-                      <img src={editPhoto} alt="Profile preview" className="w-12 h-12 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
-                      <span className="text-[10px] text-green-600 font-semibold block">{"✓ " + t('selected')}</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
-                  )}
+              {/* Mobile Number (if missing) */}
+              {!currentUser.phone && (
+                <div>
+                  <label htmlFor="directPhone" className="block text-[10px] font-bold text-slate-700 mb-1.5 uppercase">
+                    Add Mobile Number (for WhatsApp)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
+                    <input
+                      id="directPhone"
+                      type="tel"
+                      placeholder="Enter 10-digit number"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                      maxLength={10}
+                      className="w-full pl-12 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Profile Description */}
               <div>
@@ -1007,6 +1303,100 @@ const WorkerDashboard = () => {
                 {profileSaving ? t('savingChanges') : t('saveProfileDetails')}
               </button>
             </form>
+
+            {/* Profile Photo Request Section */}
+            <div className="border-t border-slate-100 pt-4 mt-2 flex flex-col gap-3">
+              <h4 className="font-bold text-slate-850 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                🖼️ Profile Photo Update Request
+              </h4>
+              {photoError && (
+                <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                  {photoError}
+                </div>
+              )}
+              {photoSuccess && (
+                <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                  {photoSuccess}
+                </div>
+              )}
+
+              {!photoRequest ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-slate-500 text-xs leading-relaxed">
+                    Profile photos must be approved by an administrator to ensure they are professional and clear.
+                  </p>
+                  <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileChange(e, setRequestedPhoto)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                    {requestedPhoto ? (
+                      <div className="text-center w-full">
+                        <img src={requestedPhoto} alt="Requested profile preview" className="w-12 h-12 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
+                        <span className="text-[10px] text-green-600 font-semibold block">✓ Selected</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-600">Select New Profile Photo</span>
+                    )}
+                  </div>
+                  {requestedPhoto && (
+                    <button
+                      type="button"
+                      onClick={handleRequestPhotoChange}
+                      disabled={photoLoading}
+                      className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
+                    >
+                      {photoLoading ? 'Submitting Request...' : 'Submit Photo Change Request'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
+                      photoRequest.status === 'pending'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : photoRequest.status === 'approved'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
+                      {photoRequest.status}
+                    </span>
+                    <span className="text-xs text-slate-500 font-semibold">Active Photo Request</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="text-center">
+                      <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Current Photo</span>
+                      <img src={photoRequest.oldPhotoUrl || currentUser.profilePhotoUrl} alt="Old profile" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
+                    </div>
+                    <span className="text-slate-400 font-bold">→</span>
+                    <div className="text-center">
+                      <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Requested Photo</span>
+                      <img src={photoRequest.newPhotoUrl} alt="New profile" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
+                    </div>
+                  </div>
+
+                  {photoRequest.status === 'pending' && (
+                    <p className="text-[10px] text-slate-500 text-center italic">
+                      Awaiting administrator approval. You will be notified once reviewed.
+                    </p>
+                  )}
+
+                  {photoRequest.status === 'rejected' && (
+                    <button
+                      type="button"
+                      onClick={handleResetPhotoRequest}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-colors w-full cursor-pointer"
+                    >
+                      Request Again / Reset
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Update Phone Number Card */}
@@ -1143,6 +1533,96 @@ const WorkerDashboard = () => {
               </div>
             )}
           </div>
+        </div>
+      </Modal>
+
+      {/* DISPUTE MODAL */}
+      <Modal
+        isOpen={isDisputeOpen}
+        onClose={() => {
+          setIsDisputeOpen(false);
+          setDisputeError('');
+        }}
+        title="Raise Payment Dispute"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-slate-500 text-xs leading-relaxed font-medium">
+            You are raising a payment dispute. The WorkLink admin will review the job details, UPI reference, and employer comments to resolve the dispute.
+          </p>
+
+          {disputeError && (
+            <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+              {disputeError}
+            </div>
+          )}
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setDisputeError('');
+              setDisputeLoading(true);
+              try {
+                await handleConfirmPayment(disputeJobId, false, disputeReason, disputeComment);
+                setDisputeLoading(false);
+                setDisputeComment('');
+                setDisputeReason('No payment received');
+              } catch (err) {
+                console.error("Dispute submit failed:", err);
+                setDisputeError("Failed to submit dispute request.");
+                setDisputeLoading(false);
+              }
+            }}
+            className="flex flex-col gap-4 text-xs font-semibold"
+          >
+            <div>
+              <label htmlFor="disputeReasonSelect" className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5">
+                Reason for Dispute
+              </label>
+              <select
+                id="disputeReasonSelect"
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-800 font-semibold cursor-pointer focus:border-red-500 focus:outline-none"
+              >
+                <option value="No payment received">No payment received</option>
+                <option value="Incorrect amount">Incorrect amount</option>
+                <option value="Invalid transaction reference">Invalid transaction reference</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="disputeCommentText" className="block text-[10px] uppercase font-bold text-slate-500 mb-1.5">
+                Explain details
+              </label>
+              <textarea
+                id="disputeCommentText"
+                rows={3}
+                placeholder="Provide additional details or transaction details..."
+                value={disputeComment}
+                onChange={(e) => setDisputeComment(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:border-red-500 focus:outline-none font-medium"
+                required
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDisputeOpen(false)}
+                className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={disputeLoading}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl shadow-md flex items-center justify-center cursor-pointer"
+              >
+                {disputeLoading ? 'Submitting Dispute...' : 'File Dispute'}
+              </button>
+            </div>
+          </form>
         </div>
       </Modal>
     </div>
