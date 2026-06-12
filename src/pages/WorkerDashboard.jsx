@@ -1307,7 +1307,7 @@ const WorkerDashboard = () => {
             {/* Profile Photo Request Section */}
             <div className="border-t border-slate-100 pt-4 mt-2 flex flex-col gap-3">
               <h4 className="font-bold text-slate-850 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                🖼️ Profile Photo Update Request
+                 Profile Photo Update Request
               </h4>
               {photoError && (
                 <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
@@ -1402,7 +1402,7 @@ const WorkerDashboard = () => {
           {/* Update Phone Number Card */}
           <div className="border-t border-slate-100 pt-5 flex flex-col gap-4">
             <h4 className="font-bold text-slate-850 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              {"📞 " + t('updateMobileNumber')}
+              {t('updateMobileNumber')}
             </h4>
             
             {phoneError && (
