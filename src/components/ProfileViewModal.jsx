@@ -3,8 +3,10 @@ import Modal from './Modal';
 import RatingStars from './RatingStars';
 import { authService, reviewService, reportService } from '../services/db';
 import { BadgeCheck, MapPin, Briefcase, Star, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, currentUserName, canWriteReview }) => {
+  const { t } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(false);

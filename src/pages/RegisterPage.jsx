@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
-import { ShieldCheck, UserCheck, Briefcase, Upload } from 'lucide-react';
+import { ShieldCheck, UserCheck, Briefcase, Upload, Camera } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { authService } from '../services/db';
 
@@ -542,27 +542,53 @@ const RegisterPage = () => {
               <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
                 Take a clear selfie of your face. Ensure your face is clearly visible without sunglasses or hats.
               </p>
-              <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  onChange={(e) => handleFileChange(e, setSelfie)}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  required={!selfie}
-                  disabled={loading}
-                />
+              <div className="border border-slate-200 bg-slate-50/50 rounded-xl p-4 flex flex-col items-center justify-center gap-3">
                 {selfie ? (
-                  <div className="text-center w-full">
-                    <img src={selfie} alt="Selfie preview" className="w-20 h-20 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
-                    <span className="text-[10px] text-green-600 font-semibold block">✓ Selfie Captured</span>
+                  <div className="text-center w-full relative">
+                    <img src={selfie} alt="Selfie preview" className="w-20 h-20 rounded-full object-cover mx-auto border border-slate-200 mb-2 shadow-sm" />
+                    <span className="text-xs text-green-600 font-semibold flex items-center justify-center gap-1">
+                      <ShieldCheck size={14} /> Selfie Selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelfie('')}
+                      className="mt-2 text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                    >
+                      Remove & Retake
+                    </button>
                   </div>
                 ) : (
-                  <>
-                    <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">Take Selfie / Upload Photo</span>
-                    <span className="text-[10px] text-slate-400">Camera starts automatically on mobile</span>
-                  </>
+                  <div className="w-full flex flex-col sm:flex-row gap-3">
+                    {/* Option 1: Take Selfie directly */}
+                    <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg text-center transition-all hover:border-primary">
+                      <Camera size={20} className="text-primary" />
+                      <span className="text-xs font-bold text-slate-700">Take Selfie</span>
+                      <span className="text-[10px] text-slate-400">Uses front camera directly</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        onChange={(e) => handleFileChange(e, setSelfie)}
+                        className="hidden"
+                        required={!selfie}
+                        disabled={loading}
+                      />
+                    </label>
+                    {/* Option 2: Upload from Local Files */}
+                    <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-2 p-4 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg text-center transition-all hover:border-primary">
+                      <Upload size={20} className="text-slate-500" />
+                      <span className="text-xs font-bold text-slate-700">Upload Photo</span>
+                      <span className="text-[10px] text-slate-400">Choose from gallery/files</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileChange(e, setSelfie)}
+                        className="hidden"
+                        required={!selfie}
+                        disabled={loading}
+                      />
+                    </label>
+                  </div>
                 )}
               </div>
             </div>

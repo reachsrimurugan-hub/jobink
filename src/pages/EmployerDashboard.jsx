@@ -9,7 +9,7 @@ import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
-import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload } from 'lucide-react';
+import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, CheckCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.webp';
 
@@ -52,7 +52,7 @@ const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
 };
 
 const EmployerDashboard = () => {
-  const { currentUser, updateProfile, reloadProfile } = useAuth();
+  const { currentUser, updateProfile, reloadProfile, logout, startTransition, endTransition } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
@@ -76,7 +76,7 @@ const EmployerDashboard = () => {
   const handleViewWorkerProfile = (workerId) => {
     setSelectedWorkerId(workerId);
     const workedWithWorker = myJobs.some(
-      job => job.status === 'completed' && job.selectedWorkers?.includes(workerId)
+      job => job.status?.toLowerCase() === 'completed' && job.selectedWorkers?.includes(workerId)
     );
     setCanReviewWorker(workedWithWorker);
     setIsProfileOpen(true);
@@ -119,12 +119,25 @@ const EmployerDashboard = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [changeOtp, setChangeOtp] = useState('');
 
-  // Photo Change States
-  const [photoRequest, setPhotoRequest] = useState(null);
-  const [requestedPhoto, setRequestedPhoto] = useState('');
-  const [photoLoading, setPhotoLoading] = useState(false);
-  const [photoError, setPhotoError] = useState('');
-  const [photoSuccess, setPhotoSuccess] = useState('');
+  // Name Change States
+  const [nameRequest, setNameRequest] = useState(null);
+  const [newName, setNewName] = useState('');
+  const [nameLoading, setNameLoading] = useState(false);
+  const [nameError, setNameError] = useState('');
+  const [nameSuccess, setNameSuccess] = useState('');
+
+  // UPI Change States
+  const [upiRequest, setUpiRequest] = useState(null);
+  const [newUpiId, setNewUpiId] = useState('');
+  const [newUpiQr, setNewUpiQr] = useState('');
+  const [upiLoading, setUpiLoading] = useState(false);
+  const [upiError, setUpiError] = useState('');
+  const [upiSuccess, setUpiSuccess] = useState('');
+
+  // Help & Terms Modal states
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
+
 
   // Re-verification states
   const [reUpiId, setReUpiId] = useState('');
@@ -160,6 +173,8 @@ const EmployerDashboard = () => {
       setEditPhoto(currentUser.profilePhotoUrl || '');
       setEditDescription(currentUser.description || '');
       setEditPhone(currentUser.phone || '');
+      setNewName(currentUser.name || '');
+      setNewUpiId(currentUser.upiId || '');
     }
   }, [currentUser]);
 
@@ -182,8 +197,10 @@ const EmployerDashboard = () => {
     try {
       const phoneReq = await authService.getPhoneChangeRequestForUser(currentUser.uid);
       setPhoneRequest(phoneReq);
-      const photoReq = await authService.getPhotoChangeRequestForUser(currentUser.uid);
-      setPhotoRequest(photoReq);
+      const nameReq = await authService.getNameChangeRequestForUser(currentUser.uid);
+      setNameRequest(nameReq);
+      const upiReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
+      setUpiRequest(upiReq);
     } catch (err) {
       console.error("Failed to load requests:", err);
     }
@@ -206,21 +223,26 @@ const EmployerDashboard = () => {
     setProfileSuccess('');
     setProfileSaving(true);
 
-    const profileData = {
-      description: editDescription
-    };
-
-    if (!currentUser.phone) {
-      const sanitized = editPhone.replace(/[^0-9]/g, '');
-      if (sanitized.length !== 10) {
-        setProfileError('Please enter a valid 10-digit mobile number.');
-        setProfileSaving(false);
-        return;
-      }
-      profileData.phone = `+91${sanitized}`;
-    }
-
     try {
+      const profileData = {
+        description: editDescription
+      };
+
+      if (!currentUser.phone) {
+        const sanitized = editPhone.replace(/[^0-9]/g, '');
+        if (sanitized.length !== 10) {
+          setProfileError('Please enter a valid 10-digit mobile number.');
+          setProfileSaving(false);
+          return;
+        }
+        profileData.phone = `+91${sanitized}`;
+      }
+
+      if (editPhoto && editPhoto.startsWith('data:')) {
+        const compressed = await compressImage(editPhoto, 400, 400);
+        profileData.profilePhotoUrl = compressed;
+      }
+
       await updateProfile(profileData);
       setProfileSuccess('Profile updated successfully!');
       setProfileSaving(false);
@@ -231,40 +253,118 @@ const EmployerDashboard = () => {
     }
   };
 
-  const handleRequestPhotoChange = async () => {
-    if (!requestedPhoto) return;
-    setPhotoError('');
-    setPhotoSuccess('');
-    setPhotoLoading(true);
+  const handleLogout = async () => {
     try {
-      await authService.requestPhotoChange(
-        currentUser.uid,
-        currentUser.name || 'User',
-        currentUser.profilePhotoUrl || '',
-        requestedPhoto
-      );
-      setPhotoSuccess('Photo change request submitted to Admin successfully.');
-      setRequestedPhoto('');
-      await loadRequests();
-      setPhotoLoading(false);
+      startTransition();
+      await logout();
+      navigate('/login');
+      setTimeout(() => {
+        endTransition();
+      }, 500);
     } catch (err) {
-      console.error(err);
-      setPhotoError('Failed to request photo change.');
-      setPhotoLoading(false);
+      console.error('Logout error', err);
+      endTransition();
     }
   };
 
-  const handleResetPhotoRequest = async () => {
-    setPhotoLoading(true);
+  const handleRequestNameChange = async (e) => {
+    e.preventDefault();
+    setNameError('');
+    setNameSuccess('');
+    if (!newName.trim()) {
+      setNameError('Please enter a valid name.');
+      return;
+    }
+    if (newName.trim() === currentUser.name) {
+      setNameError('New name cannot be the same as your current name.');
+      return;
+    }
+    setNameLoading(true);
     try {
-      await authService.deletePhotoChangeRequest(currentUser.uid);
-      setPhotoRequest(null);
-      setRequestedPhoto('');
-      setPhotoLoading(false);
+      await authService.requestNameChange(
+        currentUser.uid,
+        currentUser.name || '',
+        newName.trim(),
+        currentUser.name || 'User'
+      );
+      setNameSuccess('Name change request submitted successfully to Admin.');
+      await loadRequests();
+      setNameLoading(false);
     } catch (err) {
       console.error(err);
-      setPhotoError('Failed to reset request.');
-      setPhotoLoading(false);
+      setNameError('Failed to request name change.');
+      setNameLoading(false);
+    }
+  };
+
+  const handleResetNameRequest = async () => {
+    setNameLoading(true);
+    try {
+      await authService.deleteNameChangeRequest(currentUser.uid);
+      setNameRequest(null);
+      setNameSuccess('');
+      setNameError('');
+      setNewName(currentUser.name || '');
+      setNameLoading(false);
+    } catch (err) {
+      console.error(err);
+      setNameError('Failed to reset request.');
+      setNameLoading(false);
+    }
+  };
+
+  const handleRequestUpiChange = async (e) => {
+    e.preventDefault();
+    setUpiError('');
+    setUpiSuccess('');
+
+    const upiRegex = /^[\w.-]+@[\w.-]+$/;
+    if (!upiRegex.test(newUpiId.trim())) {
+      setUpiError('Please enter a valid UPI ID (e.g. username@bank).');
+      return;
+    }
+
+    if (!newUpiQr) {
+      setUpiError('UPI QR Code image is required.');
+      return;
+    }
+
+    setUpiLoading(true);
+    try {
+      const compressedQr = await compressImage(newUpiQr, 800, 800);
+      await authService.requestUpiChange(
+        currentUser.uid,
+        currentUser.upiId || '',
+        newUpiId.trim(),
+        currentUser.upiQrUrl || '',
+        compressedQr,
+        currentUser.name || 'User'
+      );
+      setUpiSuccess('UPI change request submitted successfully to Admin.');
+      setNewUpiQr('');
+      await loadRequests();
+      setUpiLoading(false);
+    } catch (err) {
+      console.error(err);
+      setUpiError('Failed to request UPI change.');
+      setUpiLoading(false);
+    }
+  };
+
+  const handleResetUpiRequest = async () => {
+    setUpiLoading(true);
+    try {
+      await authService.deleteUpiChangeRequest(currentUser.uid);
+      setUpiRequest(null);
+      setUpiSuccess('');
+      setUpiError('');
+      setNewUpiId(currentUser.upiId || '');
+      setNewUpiQr('');
+      setUpiLoading(false);
+    } catch (err) {
+      console.error(err);
+      setUpiError('Failed to reset request.');
+      setUpiLoading(false);
     }
   };
 
@@ -710,8 +810,8 @@ const EmployerDashboard = () => {
     }
   };
 
-  const activeJobs = myJobs.filter(j => j.status !== 'completed');
-  const completedJobs = myJobs.filter(j => j.status === 'completed');
+  const activeJobs = myJobs.filter(j => j.status?.toLowerCase() !== 'completed');
+  const completedJobs = myJobs.filter(j => j.status?.toLowerCase() === 'completed');
 
   const filteredJobs = myJobs.filter(job => {
     const matchesSearch = 
@@ -721,7 +821,7 @@ const EmployerDashboard = () => {
       
     const matchesStatus = 
       statusFilter === 'all' || 
-      job.status === statusFilter;
+      job.status?.toLowerCase() === statusFilter.toLowerCase();
       
     return matchesSearch && matchesStatus;
   });
@@ -749,6 +849,11 @@ const EmployerDashboard = () => {
                     ? t('pendingVerificationDescEmployer')
                     : t('rejectedVerificationDescEmployer')}
                 </p>
+                {currentUser.verificationStatus === 'rejected' && currentUser.rejectionReason && (
+                  <p className="text-xs text-red-800 bg-red-100/30 p-2 rounded border border-red-150/20 font-semibold mt-1">
+                    Reason: {currentUser.rejectionReason}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1201,25 +1306,47 @@ const EmployerDashboard = () => {
                         <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
                           Selfie Verification
                         </label>
-                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="user"
-                            onChange={(e) => handleFileChange(e, setReSelfie)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            required={!reSelfie}
-                          />
+                        <div className="border border-dashed border-slate-300 rounded-xl p-2 flex flex-col items-center justify-center gap-2 bg-white h-24 relative">
                           {reSelfie ? (
-                            <div className="text-center w-full">
+                            <div className="text-center w-full relative">
                               <img src={reSelfie} alt="Re-Selfie preview" className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200" />
-                              <span className="text-[9px] text-green-600 font-semibold block mt-1">✓ Selfie Captured</span>
+                              <span className="text-[9px] text-green-600 font-semibold block mt-1">✓ Selfie Selected</span>
+                              <button
+                                type="button"
+                                onClick={() => setReSelfie('')}
+                                className="text-[9px] text-red-500 hover:underline font-semibold block mx-auto mt-0.5"
+                              >
+                                Clear
+                              </button>
                             </div>
                           ) : (
-                            <>
-                              <Upload size={14} className="text-slate-400" />
-                              <span className="text-xs font-semibold text-slate-550">Take Selfie</span>
-                            </>
+                            <div className="w-full h-full flex gap-2">
+                              {/* Option 1: Take Selfie */}
+                              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1 border border-slate-100 hover:border-primary bg-slate-50 hover:bg-slate-100 rounded-lg text-center transition-all p-1">
+                                <Camera size={16} className="text-primary" />
+                                <span className="text-[10px] font-bold text-slate-700">Take Selfie</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="user"
+                                  onChange={(e) => handleFileChange(e, setReSelfie)}
+                                  className="hidden"
+                                  required={!reSelfie}
+                                />
+                              </label>
+                              {/* Option 2: Upload Photo */}
+                              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1 border border-slate-100 hover:border-primary bg-slate-50 hover:bg-slate-100 rounded-lg text-center transition-all p-1">
+                                <Upload size={16} className="text-slate-500" />
+                                <span className="text-[10px] font-bold text-slate-700">Upload Photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleFileChange(e, setReSelfie)}
+                                  className="hidden"
+                                  required={!reSelfie}
+                                />
+                              </label>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1265,38 +1392,40 @@ const EmployerDashboard = () => {
               )}
 
               {/* User Bio Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
+              <div className="relative bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col items-center text-center gap-4">
+                {/* Edit Profile button at top-right */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileSuccess('');
+                    setProfileError('');
+                    setIsEditProfileOpen(true);
+                  }}
+                  className="absolute top-4 right-4 text-xs font-semibold text-primary hover:text-primary-dark transition-colors cursor-pointer"
+                >
+                  {t('editProfile')}
+                </button>
+
+                {/* Profile Photo */}
                 <img 
                   src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
                   alt={currentUser.name || t('employer')} 
                   className="w-20 h-20 rounded-full object-cover border border-slate-200"
                 />
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="flex justify-center sm:justify-start items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileSuccess('');
-                        setProfileError('');
-                        setIsEditProfileOpen(true);
-                      }}
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <Edit3 size={13} className="text-slate-400" />
-                      <span>{t('editProfile')}</span>
-                    </button>
-                  </div>
+
+                {/* User Details Below Profile Photo */}
+                <div className="w-full flex flex-col items-center">
+                  <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
                   <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mt-1.5 block">
                     {currentUser.businessType === 'Business' ? t('shopOwner') : t('householdEmployer')}
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{currentUser.phone}</span>
                   {currentUser.description && (
-                    <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed">
+                    <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed max-w-md">
                       "{currentUser.description}"
                     </p>
                   )}
-                  <div className="flex justify-center sm:justify-start items-center gap-2 mt-2.5">
+                  <div className="flex items-center justify-center gap-2 mt-2.5">
                     <RatingStars rating={currentUser.rating} size={15} />
                     <span className="text-xs text-slate-400 font-medium">{t('reviewsCount', { count: currentUser.ratingCount || 0 })}</span>
                   </div>
@@ -1326,6 +1455,50 @@ const EmployerDashboard = () => {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Support & Settings Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2">
+                  Support & Settings
+                </h4>
+                <div className="flex flex-col divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setIsHelpOpen(true)}
+                    className="flex items-center justify-between py-3 hover:text-primary transition-colors cursor-pointer text-left w-full"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <HelpCircle size={16} className="text-slate-400" />
+                      <span>Help & Support</span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsTermsOpen(true)}
+                    className="flex items-center justify-between py-3 hover:text-primary transition-colors cursor-pointer text-left w-full"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <FileText size={16} className="text-slate-400" />
+                      <span>Terms & Conditions</span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center justify-between py-3 text-red-600 hover:text-red-750 hover:bg-red-50/20 transition-colors cursor-pointer text-left w-full rounded-b-lg"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <LogOut size={16} className="text-red-500" />
+                      <span>Logout</span>
+                    </div>
+                    <ChevronRight size={14} className="text-red-400" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1541,26 +1714,39 @@ const EmployerDashboard = () => {
                 {profileSuccess}
               </div>
             )}
-
             <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
-              {/* Blocked Name Input */}
+              {/* Profile Photo */}
               <div>
-                <label htmlFor="disabledName" className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase">
-                  {t('fullNameIdentityLock')}
+                <label className="block text-[10px] font-bold text-slate-700 mb-1.5 uppercase">
+                  Profile Photo
                 </label>
-                <div>
-                  <input
-                    id="disabledName"
-                    type="text"
-                    value={currentUser.name}
-                    disabled
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-455 cursor-not-allowed"
-                  />
-                  <span className="text-[9px] text-red-500 font-bold mt-1 flex items-center gap-1.5">
-                    <ShieldAlert size={10} className="shrink-0" />
-                    <span>{t('blockedNameWarning')}</span>
-                  </span>
+                <div className="flex items-center gap-4">
+                  <img src={editPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Profile photo" className="w-16 h-16 rounded-full object-cover border border-slate-200" />
+                  <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                    Upload New Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileChange(e, setEditPhoto)}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
+              </div>
+
+              {/* Profile Description */}
+              <div>
+                <label htmlFor="description" className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
+                  {t('profileBio')}
+                </label>
+                <textarea
+                  id="description"
+                  rows={3}
+                  placeholder={t('employerBioPlaceholder')}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-primary"
+                />
               </div>
 
               {/* Mobile Number (if missing) */}
@@ -1585,21 +1771,6 @@ const EmployerDashboard = () => {
                 </div>
               )}
 
-              {/* Profile Description */}
-              <div>
-                <label htmlFor="description" className="block text-[10px] font-bold text-slate-755 mb-1.5 uppercase">
-                  {t('profileBio')}
-                </label>
-                <textarea
-                  id="description"
-                  rows={3}
-                  placeholder={t('employerBioPlaceholder')}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 focus:border-primary"
-                />
-              </div>
-
               <button
                 type="submit"
                 disabled={profileSaving}
@@ -1609,99 +1780,201 @@ const EmployerDashboard = () => {
               </button>
             </form>
 
-            {/* Profile Photo Request Section */}
-            <div className="border-t border-slate-100 pt-4 mt-2 flex flex-col gap-3">
-              <h4 className="font-bold text-slate-850 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                Profile Photo Update Request
+            {/* Name Change Request Section */}
+            <div className="border-t border-slate-100 pt-5 flex flex-col gap-3">
+              <h4 className="font-bold text-slate-855 text-xs uppercase tracking-wider">
+                Name Change Request
               </h4>
-              {photoError && (
+              {nameError && (
                 <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-                  {photoError}
+                  {nameError}
                 </div>
               )}
-              {photoSuccess && (
+              {nameSuccess && (
                 <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                  {photoSuccess}
+                  {nameSuccess}
                 </div>
               )}
 
-              {!photoRequest ? (
-                <div className="flex flex-col gap-3">
+              {!nameRequest ? (
+                <form onSubmit={handleRequestNameChange} className="flex flex-col gap-3">
                   <p className="text-slate-500 text-xs leading-relaxed">
-                    Profile photos must be approved by an administrator to ensure they are professional and clear.
+                    Name changes require administrator approval to ensure your account matches your verified identity.
                   </p>
-                  <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all">
+                  <div className="flex gap-2">
                     <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileChange(e, setRequestedPhoto)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      type="text"
+                      placeholder="Enter new full name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                      required
                     />
-                    {requestedPhoto ? (
-                      <div className="text-center w-full">
-                        <img src={requestedPhoto} alt="Requested profile preview" className="w-12 h-12 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
-                        <span className="text-[10px] text-green-600 font-semibold block">✓ Selected</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-semibold text-slate-600">Select New Profile Photo</span>
-                    )}
-                  </div>
-                  {requestedPhoto && (
                     <button
-                      type="button"
-                      onClick={handleRequestPhotoChange}
-                      disabled={photoLoading}
-                      className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
+                      type="submit"
+                      disabled={nameLoading}
+                      className="bg-primary hover:bg-primary-dark text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer shrink-0"
                     >
-                      {photoLoading ? 'Submitting Request...' : 'Submit Photo Change Request'}
+                      {nameLoading ? 'Submitting...' : 'Request'}
                     </button>
-                  )}
-                </div>
+                  </div>
+                </form>
               ) : (
                 <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2.5">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
-                      photoRequest.status === 'pending'
+                      nameRequest.status === 'pending'
                         ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : photoRequest.status === 'approved'
+                        : nameRequest.status === 'approved'
                           ? 'bg-green-50 text-green-700 border-green-200'
                           : 'bg-red-50 text-red-700 border-red-200'
                     }`}>
-                      {photoRequest.status}
+                      {nameRequest.status}
                     </span>
-                    <span className="text-xs text-slate-500 font-semibold">Active Photo Request</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-center gap-4">
-                    <div className="text-center">
-                      <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Current Photo</span>
-                      <img src={photoRequest.oldPhotoUrl || currentUser.profilePhotoUrl} alt="Old profile" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
-                    </div>
-                    <span className="text-slate-400 font-bold">→</span>
-                    <div className="text-center">
-                      <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Requested Photo</span>
-                      <img src={photoRequest.newPhotoUrl} alt="New profile" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
-                    </div>
+                    <span className="text-xs text-slate-500 font-semibold">Name Update Request</span>
                   </div>
 
-                  {photoRequest.status === 'pending' && (
-                    <p className="text-[10px] text-slate-500 text-center italic">
+                  <div className="text-xs text-slate-650">
+                    Requested name change: <strong className="text-slate-800">{nameRequest.newName}</strong>
+                  </div>
+
+                  {nameRequest.status === 'pending' && (
+                    <p className="text-[10px] text-slate-500 italic">
                       Awaiting administrator approval. You will be notified once reviewed.
                     </p>
                   )}
 
-                  {photoRequest.status === 'rejected' && (
-                    <button
-                      type="button"
-                      onClick={handleResetPhotoRequest}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-colors w-full cursor-pointer"
-                    >
-                      Request Again / Reset
-                    </button>
+                  {nameRequest.status === 'rejected' && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold">
+                        Reason: {nameRequest.rejectionReason || 'No reason provided.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleResetNameRequest}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-xs transition-colors w-full cursor-pointer"
+                      >
+                        Reapply / Reset Request
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* UPI details Change Request Section */}
+            <div className="border-t border-slate-100 pt-5 flex flex-col gap-3">
+              <h4 className="font-bold text-slate-855 text-xs uppercase tracking-wider">
+                UPI Credentials Request
+              </h4>
+              {upiError && (
+                <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                  {upiError}
+                </div>
+              )}
+              {upiSuccess && (
+                <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                  {upiSuccess}
+                </div>
+              )}
+
+              {!upiRequest ? (
+                <form onSubmit={handleRequestUpiChange} className="flex flex-col gap-3">
+                  <p className="text-slate-500 text-xs leading-relaxed">
+                    UPI updates require administrator approval. Provide your UPI ID and scan-to-pay QR image.
+                  </p>
+                  <div>
+                    <label htmlFor="newUpiIdInput" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                      New UPI ID (username@bank)
+                    </label>
+                    <input
+                      id="newUpiIdInput"
+                      type="text"
+                      placeholder="username@bank"
+                      value={newUpiId}
+                      onChange={(e) => setNewUpiId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 mb-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                      New UPI QR Code Photo
+                    </label>
+                    <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all h-20">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileChange(e, setNewUpiQr)}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        required
+                      />
+                      {newUpiQr ? (
+                        <div className="text-center w-full">
+                          <img src={newUpiQr} alt="New QR Preview" className="w-10 h-10 object-contain mx-auto border border-slate-200 p-0.5 bg-white" />
+                          <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Selected</span>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload size={14} className="text-slate-400" />
+                          <span className="text-xs font-semibold text-slate-550">Upload UPI QR Image</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={upiLoading}
+                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer mt-1"
+                  >
+                    {upiLoading ? 'Submitting...' : 'Submit UPI Update Request'}
+                  </button>
+                </form>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
+                      upiRequest.status === 'pending'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : upiRequest.status === 'approved'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
+                      {upiRequest.status}
+                    </span>
+                    <span className="text-xs text-slate-500 font-semibold">UPI Update Request</span>
+                  </div>
+
+                  <div className="text-xs text-slate-655 space-y-2">
+                    <div>Requested UPI ID: <strong className="text-slate-800 font-mono">{upiRequest.newUpiId}</strong></div>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase">Requested QR Code:</span>
+                      <img src={upiRequest.newUpiQr} alt="New QR Preview" className="w-12 h-12 object-contain border border-slate-200 p-0.5 bg-white" />
+                    </div>
+                  </div>
+
+                  {upiRequest.status === 'pending' && (
+                    <p className="text-[10px] text-slate-500 italic">
+                      Awaiting administrator approval. You will be notified once reviewed.
+                    </p>
+                  )}
+
+                  {upiRequest.status === 'rejected' && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold">
+                        Reason: {upiRequest.rejectionReason || 'No reason provided.'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleResetUpiRequest}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-colors w-full cursor-pointer"
+                      >
+                        Reapply / Reset Request
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}     </div>
           </div>
 
           {/* Update Phone Number Card */}
@@ -1828,6 +2101,11 @@ const EmployerDashboard = () => {
                 <p className="text-xs text-slate-655">
                   {t('adminRejectedPhoneChange', { phone: phoneRequest.newPhone })}
                 </p>
+                {phoneRequest.rejectionReason && (
+                  <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold mt-1">
+                    Reason: {phoneRequest.rejectionReason}
+                  </p>
+                )}
                 <button
                   type="button"
                   onClick={handleResetPhoneRequest}
@@ -2044,6 +2322,101 @@ const EmployerDashboard = () => {
               </button>
             </div>
           </form>
+        </div>
+      </Modal>
+
+      {/* Help & Support Modal */}
+      <Modal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+        title="Help & Support"
+      >
+        <div className="flex flex-col gap-4 text-left py-2">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Welcome to Jobink Help & Support. If you need any assistance regarding jobs, profile validation, or payments, feel free to contact us.
+          </p>
+
+          <div className="space-y-3">
+            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">WhatsApp Support</span>
+                <strong className="text-xs text-slate-700 font-mono">+91 99999 99999</strong>
+              </div>
+              <a
+                href="https://wa.me/919999999999"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+              >
+                Chat Now
+              </a>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Email Support</span>
+                <strong className="text-xs text-slate-700 font-mono">support@jobink.in</strong>
+              </div>
+              <a
+                href="mailto:support@jobink.in"
+                className="bg-primary hover:bg-primary-dark text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+              >
+                Email Us
+              </a>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 mt-2">
+            <h5 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-2.5">Frequently Asked Questions</h5>
+            <div className="space-y-3 divide-y divide-slate-100 text-xs">
+              <div className="pt-2.5 first:pt-0">
+                <strong className="text-slate-755 block mb-1">How long does Trust Verification take?</strong>
+                <p className="text-slate-500 leading-relaxed">Identity verification by our admin team usually takes 2-4 business hours.</p>
+              </div>
+              <div className="pt-2.5">
+                <strong className="text-slate-755 block mb-1">How are payments processed?</strong>
+                <p className="text-slate-500 leading-relaxed">Payments are made directly from employers to workers via UPI once the job is marked as completed.</p>
+              </div>
+              <div className="pt-2.5">
+                <strong className="text-slate-755 block mb-1">What happens if a dispute occurs?</strong>
+                <p className="text-slate-500 leading-relaxed">If there is an issue with payment or completion, you can raise a dispute directly from your dashboard to invoke admin review.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Terms & Conditions Modal */}
+      <Modal
+        isOpen={isTermsOpen}
+        onClose={() => setIsTermsOpen(false)}
+        title="Terms & Conditions"
+      >
+        <div className="flex flex-col gap-3 text-left py-2 max-h-[60vh] overflow-y-auto pr-1 text-xs text-slate-600 leading-relaxed">
+          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">1. Introduction</h5>
+          <p>
+            By using the Jobink platform (WorkLink), you agree to these Terms & Conditions. This platform connects independent workers with household or business employers.
+          </p>
+
+          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">2. Identity & Verification</h5>
+          <p>
+            Users must submit true and accurate details (Selfies, Aadhaar details, UPI credentials). Any misrepresentation will result in permanent account suspension and ban.
+          </p>
+
+          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">3. Job Agreements</h5>
+          <p>
+            Employers are responsible for providing a safe environment, clear instructions, and timely payments. Workers are responsible for completing the task to the best of their abilities.
+          </p>
+
+          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">4. Payment & Direct Transfer</h5>
+          <p>
+            Payments are transacted directly between the Employer and the Worker (Direct UPI transfer). Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
+          </p>
+
+          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">5. Safety & Behavior</h5>
+          <p>
+            Jobink has zero-tolerance for harassment, violence, non-payment, or platform abuse. Dispute resolutions decided by our admin moderation team are final.
+          </p>
         </div>
       </Modal>
     </div>

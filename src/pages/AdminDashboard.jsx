@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, reportService, queryService, disputeService, jobService } from '../services/db';
 import Navbar from '../components/Navbar';
-import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, FileText, Image, Phone, MapPin, AlertTriangle, MessageSquare, ShieldAlert, LogOut } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, logout, startTransition, endTransition } = useAuth();
   const [pendingUsers, setPendingUsers] = useState([]);
   const [pendingPhoneChanges, setPendingPhoneChanges] = useState([]);
-  const [pendingPhotoChanges, setPendingPhotoChanges] = useState([]);
+  const [pendingNameChanges, setPendingNameChanges] = useState([]);
+  const [pendingUpiChanges, setPendingUpiChanges] = useState([]);
   const [pendingReports, setPendingReports] = useState([]);
   const [queries, setQueries] = useState([]);
   const [pendingDisputes, setPendingDisputes] = useState([]);
@@ -19,6 +20,20 @@ const AdminDashboard = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      startTransition();
+      await logout();
+      navigate('/login');
+      setTimeout(() => {
+        endTransition();
+      }, 500);
+    } catch (err) {
+      console.error('Logout error', err);
+      endTransition();
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -31,8 +46,11 @@ const AdminDashboard = () => {
       const phoneChanges = await authService.getPendingPhoneChanges();
       setPendingPhoneChanges(phoneChanges);
 
-      const photoChanges = await authService.getPendingPhotoChanges();
-      setPendingPhotoChanges(photoChanges);
+      const nameChanges = await authService.getPendingNameChanges();
+      setPendingNameChanges(nameChanges);
+
+      const upiChanges = await authService.getPendingUpiChanges();
+      setPendingUpiChanges(upiChanges);
 
       const reports = await reportService.getPendingReports();
       setPendingReports(reports);
@@ -149,11 +167,17 @@ const AdminDashboard = () => {
   };
 
   const handleReject = async (uid) => {
+    const reason = window.prompt("Enter rejection reason for the profile:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      alert("Rejection reason is required.");
+      return;
+    }
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.verifyUser(uid, false);
+      await authService.verifyUser(uid, false, reason.trim());
       setSuccess('User profile verification rejected.');
       await loadData();
       setLoading(false);
@@ -165,11 +189,20 @@ const AdminDashboard = () => {
   };
 
   const handleVerifySelfie = async (uid, isApproved) => {
+    let reason = '';
+    if (!isApproved) {
+      reason = window.prompt("Enter rejection reason for the selfie:");
+      if (reason === null) return;
+      if (!reason.trim()) {
+        alert("Rejection reason is required.");
+        return;
+      }
+    }
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.verifySelfie(uid, isApproved);
+      await authService.verifySelfie(uid, isApproved, reason.trim());
       setSuccess(`Selfie verification ${isApproved ? 'approved' : 'rejected'}!`);
       await loadData();
       setLoading(false);
@@ -181,11 +214,20 @@ const AdminDashboard = () => {
   };
 
   const handleVerifyUpi = async (uid, isApproved) => {
+    let reason = '';
+    if (!isApproved) {
+      reason = window.prompt("Enter rejection reason for the UPI details:");
+      if (reason === null) return;
+      if (!reason.trim()) {
+        alert("Rejection reason is required.");
+        return;
+      }
+    }
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.verifyUpi(uid, isApproved);
+      await authService.verifyUpi(uid, isApproved, reason.trim());
       setSuccess(`UPI verification ${isApproved ? 'approved' : 'rejected'}!`);
       await loadData();
       setLoading(false);
@@ -232,11 +274,17 @@ const AdminDashboard = () => {
   };
 
   const handlePhoneReject = async (requestId) => {
+    const reason = window.prompt("Enter rejection reason for phone number change:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      alert("Rejection reason is required.");
+      return;
+    }
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.updatePhoneChangeStatus(requestId, 'rejected');
+      await authService.updatePhoneChangeStatus(requestId, 'rejected', reason.trim());
       setSuccess('Phone change request rejected.');
       await loadData();
       setLoading(false);
@@ -247,34 +295,78 @@ const AdminDashboard = () => {
     }
   };
 
-  const handlePhotoApprove = async (requestId) => {
+  const handleNameApprove = async (requestId) => {
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.updatePhotoChangeStatus(requestId, 'approved');
-      setSuccess('Profile photo change request approved successfully!');
+      await authService.updateNameChangeStatus(requestId, 'approved');
+      setSuccess('Name change request approved successfully!');
       await loadData();
       setLoading(false);
     } catch (err) {
       console.error(err);
-      setError('Failed to approve profile photo change request.');
+      setError('Failed to approve name change request.');
       setLoading(false);
     }
   };
 
-  const handlePhotoReject = async (requestId) => {
+  const handleNameReject = async (requestId) => {
+    const reason = window.prompt("Enter rejection reason for name change:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      alert("Rejection reason is required.");
+      return;
+    }
     setError('');
     setSuccess('');
     try {
       setLoading(true);
-      await authService.updatePhotoChangeStatus(requestId, 'rejected');
-      setSuccess('Profile photo change request rejected.');
+      await authService.updateNameChangeStatus(requestId, 'rejected', reason.trim());
+      setSuccess('Name change request rejected.');
       await loadData();
       setLoading(false);
     } catch (err) {
       console.error(err);
-      setError('Failed to reject profile photo change request.');
+      setError('Failed to reject name change request.');
+      setLoading(false);
+    }
+  };
+
+  const handleUpiApprove = async (requestId) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.updateUpiChangeStatus(requestId, 'approved');
+      setSuccess('UPI details change request approved successfully!');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to approve UPI change request.');
+      setLoading(false);
+    }
+  };
+
+  const handleUpiReject = async (requestId) => {
+    const reason = window.prompt("Enter rejection reason for UPI details change:");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      alert("Rejection reason is required.");
+      return;
+    }
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.updateUpiChangeStatus(requestId, 'rejected', reason.trim());
+      setSuccess('UPI change request rejected.');
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to reject UPI change request.');
       setLoading(false);
     }
   };
@@ -302,14 +394,24 @@ const AdminDashboard = () => {
             </h2>
             <p className="text-slate-500 text-xs mt-1">Audit profile credentials, verified badges, and sensitive phone updates.</p>
           </div>
-          <button
-            type="button"
-            onClick={handleRunMigration}
-            disabled={loading}
-            className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm transition-all cursor-pointer touch-target shrink-0"
-          >
-            🔄 Run Trust Migration
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleRunMigration}
+              disabled={loading}
+              className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm transition-all cursor-pointer touch-target shrink-0"
+            >
+              🔄 Run Trust Migration
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm transition-all cursor-pointer touch-target shrink-0 flex items-center gap-1.5"
+            >
+              <LogOut size={14} />
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Alerts */}
@@ -350,14 +452,25 @@ const AdminDashboard = () => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveSubTab('profilePhotos')}
+            onClick={() => setActiveSubTab('nameChanges')}
             className={`pb-3 text-sm font-bold border-b-2 transition-all ${
-              activeSubTab === 'profilePhotos'
+              activeSubTab === 'nameChanges'
                 ? 'border-primary text-primary'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            🖼️ Profile Photos ({pendingPhotoChanges.length})
+            ✏️ Name ({pendingNameChanges.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('upiChanges')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'upiChanges'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            💳 UPI ({pendingUpiChanges.length})
           </button>
           <button
             type="button"
@@ -887,46 +1000,119 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Tab 6: Profile Photo Change Requests Queue */}
-        {activeSubTab === 'profilePhotos' && (
+        {/* Tab 6: Name Change Requests Queue */}
+        {activeSubTab === 'nameChanges' && (
           <div>
-            {loading && pendingPhotoChanges.length === 0 ? (
+            {loading && pendingNameChanges.length === 0 ? (
               <div className="py-12 flex justify-center items-center">
                 <div className="spinner"></div>
               </div>
-            ) : pendingPhotoChanges.length === 0 ? (
+            ) : pendingNameChanges.length === 0 ? (
               <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
                 <CheckCircle className="text-green-500" size={36} />
-                <p className="text-sm font-bold text-slate-700">Photo Queue is Empty!</p>
-                <p className="text-xs text-slate-400">All profile photo update requests have been reviewed.</p>
+                <p className="text-sm font-bold text-slate-700">Name Change Queue is Empty!</p>
+                <p className="text-xs text-slate-400">All name update requests have been reviewed.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-5">
                 <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
-                  Pending Photo Change Requests ({pendingPhotoChanges.length})
+                  Pending Name Change Requests ({pendingNameChanges.length})
                 </h3>
                 
                 <div className="flex flex-col gap-4">
-                  {pendingPhotoChanges.map((req) => (
+                  {pendingNameChanges.map((req) => (
                     <div key={req.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 space-y-2 text-left">
                         <div className="flex items-center gap-2">
                           <h4 className="font-extrabold text-slate-800 text-base leading-snug">{req.userName}</h4>
-                          <span className="text-[10px] text-slate-400 font-semibold">User ID: {req.userId}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold">User ID: {req.uid}</span>
                         </div>
-                        <div className="text-xs text-slate-600 flex flex-wrap gap-6 items-center pt-3 border-t border-slate-100">
-                          <div className="text-center">
-                            <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Current Photo</span>
-                            {req.oldPhotoUrl ? (
-                              <img src={req.oldPhotoUrl} alt="Old profile" className="w-14 h-14 rounded-full object-cover border border-slate-200 mx-auto" />
-                            ) : (
-                              <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-[10px] mx-auto">None</div>
+                        <div className="text-xs text-slate-655 flex flex-wrap gap-4 items-center pt-2 border-t border-slate-50">
+                          <div>
+                            <span className="text-slate-400 font-bold block uppercase text-[9px] mb-0.5">Current Name</span>
+                            <span className="font-bold text-slate-700">{req.oldName || 'N/A'}</span>
+                          </div>
+                          <div className="text-slate-350 font-light text-lg">→</div>
+                          <div>
+                            <span className="text-primary font-bold block uppercase text-[9px] mb-0.5">Requested New Name</span>
+                            <span className="font-bold text-primary">{req.newName}</span>
+                          </div>
+                          <div className="ml-auto text-[10px] text-slate-400">
+                            Requested: {new Date(req.createdAt).toLocaleDateString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => handleNameReject(req.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100 touch-target cursor-pointer"
+                        >
+                          <XCircle size={15} />
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleNameApprove(req.id)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
+                        >
+                          <CheckCircle size={15} />
+                          Approve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 7: UPI Change Requests Queue */}
+        {activeSubTab === 'upiChanges' && (
+          <div>
+            {loading && pendingUpiChanges.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : pendingUpiChanges.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">UPI Queue is Empty!</p>
+                <p className="text-xs text-slate-400">All UPI update requests have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  Pending UPI Change Requests ({pendingUpiChanges.length})
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {pendingUpiChanges.map((req) => (
+                    <div key={req.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
+                      <div className="flex-1 space-y-3 text-left">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-extrabold text-slate-800 text-base leading-snug">{req.userName}</h4>
+                          <span className="text-[10px] text-slate-400 font-semibold">User ID: {req.uid}</span>
+                        </div>
+                        <div className="text-xs text-slate-655 flex flex-wrap gap-6 items-center pt-2 border-t border-slate-50">
+                          <div>
+                            <span className="text-slate-400 font-bold block uppercase text-[9px] mb-0.5">Current UPI ID</span>
+                            <span className="font-mono font-bold text-slate-700">{req.oldUpiId || 'N/A'}</span>
+                            {req.oldUpiQr && (
+                              <img src={req.oldUpiQr} alt="Old QR" className="w-12 h-12 object-contain mt-1 border border-slate-100 p-0.5 bg-white" />
                             )}
                           </div>
-                          <div className="text-slate-300 font-bold text-lg">→</div>
-                          <div className="text-center">
-                            <span className="text-[9px] text-slate-400 font-bold block uppercase mb-1">Requested Photo</span>
-                            <img src={req.newPhotoUrl} alt="New profile" className="w-14 h-14 rounded-full object-cover border border-slate-200 mx-auto" />
+                          <div className="text-slate-355 font-light text-lg">→</div>
+                          <div>
+                            <span className="text-primary font-bold block uppercase text-[9px] mb-0.5">Requested New UPI ID</span>
+                            <span className="font-mono font-bold text-primary">{req.newUpiId}</span>
+                            {req.newUpiQr && (
+                              <img src={req.newUpiQr} alt="New QR" className="w-12 h-12 object-contain mt-1 border border-slate-205 p-0.5 bg-white" />
+                            )}
                           </div>
                           <div className="ml-auto text-[10px] text-slate-400 self-end">
                             Requested: {new Date(req.createdAt).toLocaleDateString('en-IN')}
@@ -937,7 +1123,7 @@ const AdminDashboard = () => {
                       <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
                         <button
                           type="button"
-                          onClick={() => handlePhotoReject(req.id)}
+                          onClick={() => handleUpiReject(req.id)}
                           disabled={loading}
                           className="flex-1 md:flex-none bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100 touch-target cursor-pointer"
                         >
@@ -946,7 +1132,7 @@ const AdminDashboard = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handlePhotoApprove(req.id)}
+                          onClick={() => handleUpiApprove(req.id)}
                           disabled={loading}
                           className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
                         >

@@ -303,7 +303,7 @@ export const authService = {
   },
 
   // Review user verification proof (Approve/Reject)
-  verifyUser: async (uid, isApproved) => {
+  verifyUser: async (uid, isApproved, rejectionReason = '') => {
     const status = isApproved ? 'verified' : 'rejected';
     const userRef = doc(db, 'users', uid);
     
@@ -311,7 +311,8 @@ export const authService = {
       verificationStatus: status,
       verified: isApproved,
       upiVerified: isApproved,
-      selfieVerified: isApproved
+      selfieVerified: isApproved,
+      rejectionReason: isApproved ? '' : rejectionReason
     });
     
     const freshUser = await recalculateUserTrustAndVerification(uid);
@@ -322,7 +323,7 @@ export const authService = {
       isApproved ? "Profile Verified!" : "Profile Verification Failed",
       isApproved 
         ? "Your identity has been verified. You can now access all features of WorkLink."
-        : "Your identity proof was rejected by the admin. Please check your uploaded Selfie and UPI details."
+        : `Your identity proof was rejected by the admin. Reason: ${rejectionReason}`
     );
 
     if (freshUser) {
@@ -336,11 +337,12 @@ export const authService = {
   },
 
   // Verify Selfie specifically
-  verifySelfie: async (uid, isApproved) => {
+  verifySelfie: async (uid, isApproved, rejectionReason = '') => {
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, { 
       selfieVerified: isApproved,
-      verificationStatus: isApproved ? 'pending' : 'rejected'
+      verificationStatus: isApproved ? 'pending' : 'rejected',
+      rejectionReason: isApproved ? '' : rejectionReason
     });
     
     const freshUser = await recalculateUserTrustAndVerification(uid);
@@ -350,7 +352,7 @@ export const authService = {
       isApproved ? "Selfie Verification Approved!" : "Selfie Verification Failed",
       isApproved 
         ? "Your profile selfie has been successfully verified. Trust Score updated."
-        : "Your selfie photo was rejected by the admin. Please upload a clear face photo."
+        : `Your selfie photo was rejected by the admin. Reason: ${rejectionReason}`
     );
 
     if (freshUser) {
@@ -364,11 +366,12 @@ export const authService = {
   },
 
   // Verify UPI details specifically
-  verifyUpi: async (uid, isApproved) => {
+  verifyUpi: async (uid, isApproved, rejectionReason = '') => {
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, { 
       upiVerified: isApproved,
-      verificationStatus: isApproved ? 'pending' : 'rejected'
+      verificationStatus: isApproved ? 'pending' : 'rejected',
+      rejectionReason: isApproved ? '' : rejectionReason
     });
     
     const freshUser = await recalculateUserTrustAndVerification(uid);
@@ -378,7 +381,7 @@ export const authService = {
       isApproved ? "UPI Verification Approved!" : "UPI Verification Failed",
       isApproved 
         ? "Your UPI credentials and QR code have been approved. Trust Score updated."
-        : "Your UPI verification was rejected by the admin. Please check and upload valid UPI details."
+        : `Your UPI verification was rejected by the admin. Reason: ${rejectionReason}`
     );
 
     if (freshUser) {
@@ -497,13 +500,13 @@ export const authService = {
   },
 
   // Update phone change status (Admin Approves / Rejects)
-  updatePhoneChangeStatus: async (requestId, status) => {
+  updatePhoneChangeStatus: async (requestId, status, rejectionReason = '') => {
     const requestRef = doc(db, 'phoneChangeRequests', requestId);
     const requestSnap = await getDoc(requestRef);
     if (!requestSnap.exists()) return false;
     
     const requestData = requestSnap.data();
-    await updateDoc(requestRef, { status });
+    await updateDoc(requestRef, { status, rejectionReason });
 
     // Notify the user in real-time
     await notificationService.addNotification(
@@ -511,7 +514,7 @@ export const authService = {
       status === 'approved' ? 'Phone Change Request Approved' : 'Phone Change Request Rejected',
       status === 'approved'
         ? `Your request to change your number to ${requestData.newPhone} was approved. Verify with OTP to complete the change.`
-        : `Your request to change your number to ${requestData.newPhone} was rejected by the admin.`
+        : `Your request to change your number to ${requestData.newPhone} was rejected by the admin. Reason: ${rejectionReason}`
     );
     return true;
   },
@@ -540,6 +543,143 @@ export const authService = {
   // Reset/Delete phone change request
   deletePhoneChangeRequest: async (uid) => {
     await deleteDoc(doc(db, 'phoneChangeRequests', uid));
+    return true;
+  },
+
+  // Name Change Requests
+  requestNameChange: async (uid, oldName, newName, userName) => {
+    const requestRef = doc(db, 'nameChangeRequests', uid);
+    const payload = {
+      uid,
+      userName,
+      oldName,
+      newName,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    await setDoc(requestRef, payload);
+
+    await notificationService.addNotification(
+      'admin',
+      'Name Change Request',
+      `${userName} has requested to change their name to ${newName}.`
+    );
+    return payload;
+  },
+
+  getNameChangeRequestForUser: async (uid) => {
+    const docSnap = await getDoc(doc(db, 'nameChangeRequests', uid));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+  },
+
+  getPendingNameChanges: async () => {
+    const q = query(
+      collection(db, 'nameChangeRequests'),
+      where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  updateNameChangeStatus: async (requestId, status, rejectionReason = '') => {
+    const requestRef = doc(db, 'nameChangeRequests', requestId);
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists()) return false;
+
+    const requestData = requestSnap.data();
+    await updateDoc(requestRef, { status, rejectionReason });
+
+    if (status === 'approved') {
+      const userRef = doc(db, 'users', requestData.uid);
+      await updateDoc(userRef, { name: requestData.newName });
+    }
+
+    profileCache.delete(requestData.uid);
+
+    await notificationService.addNotification(
+      requestData.uid,
+      status === 'approved' ? 'Name Change Request Approved' : 'Name Change Request Rejected',
+      status === 'approved'
+        ? `Your request to change your name to ${requestData.newName} was approved.`
+        : `Your request to change your name to ${requestData.newName} was rejected. Reason: ${rejectionReason}`
+    );
+    return true;
+  },
+
+  deleteNameChangeRequest: async (uid) => {
+    await deleteDoc(doc(db, 'nameChangeRequests', uid));
+    return true;
+  },
+
+  // UPI Change Requests
+  requestUpiChange: async (uid, oldUpiId, newUpiId, oldUpiQr, newUpiQr, userName) => {
+    const requestRef = doc(db, 'upiChangeRequests', uid);
+    const payload = {
+      uid,
+      userName,
+      oldUpiId,
+      newUpiId,
+      oldUpiQr,
+      newUpiQr,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    await setDoc(requestRef, payload);
+
+    await notificationService.addNotification(
+      'admin',
+      'UPI Details Change Request',
+      `${userName} has requested to update their UPI details.`
+    );
+    return payload;
+  },
+
+  getUpiChangeRequestForUser: async (uid) => {
+    const docSnap = await getDoc(doc(db, 'upiChangeRequests', uid));
+    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+  },
+
+  getPendingUpiChanges: async () => {
+    const q = query(
+      collection(db, 'upiChangeRequests'),
+      where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  updateUpiChangeStatus: async (requestId, status, rejectionReason = '') => {
+    const requestRef = doc(db, 'upiChangeRequests', requestId);
+    const requestSnap = await getDoc(requestRef);
+    if (!requestSnap.exists()) return false;
+
+    const requestData = requestSnap.data();
+    await updateDoc(requestRef, { status, rejectionReason });
+
+    if (status === 'approved') {
+      const userRef = doc(db, 'users', requestData.uid);
+      await updateDoc(userRef, {
+        upiId: requestData.newUpiId,
+        upiQrUrl: requestData.newUpiQr
+      });
+    }
+
+    profileCache.delete(requestData.uid);
+
+    await notificationService.addNotification(
+      requestData.uid,
+      status === 'approved' ? 'UPI Change Request Approved' : 'UPI Change Request Rejected',
+      status === 'approved'
+        ? `Your request to change your UPI details was approved.`
+        : `Your request to change your UPI details was rejected. Reason: ${rejectionReason}`
+    );
+    return true;
+  },
+
+  deleteUpiChangeRequest: async (uid) => {
+    await deleteDoc(doc(db, 'upiChangeRequests', uid));
     return true;
   },
 

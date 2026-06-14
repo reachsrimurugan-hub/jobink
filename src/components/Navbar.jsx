@@ -174,15 +174,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                 <span>{t('hello')}, <strong className="text-slate-800">{currentUser.name || 'User'}</strong></span>
               </div>
 
-              {/* Logout Button */}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="text-slate-500 hover:text-slate-700 hover:bg-slate-50 p-2 rounded-lg border border-slate-200 transition-colors flex items-center justify-center touch-target"
-                title={t('logout')}
-              >
-                <LogOut size={16} />
-              </button>
+
             </>
           )}
         </div>
