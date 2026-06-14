@@ -26,6 +26,7 @@ const JobCard = ({
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [upiCopied, setUpiCopied] = useState(false);
 
   const { 
     title, 
@@ -240,7 +241,7 @@ const JobCard = ({
                 </div>
                 {job.paymentAmount && (
                   <p className="text-[11px] font-semibold text-slate-655">
-                    Disputed Amount: <strong>₹{job.paymentAmount}</strong> (Ref ID: <span className="font-mono">{job.transactionReferenceId}</span>)
+                    Disputed Amount: <strong>₹{job.paymentAmount}</strong>
                   </p>
                 )}
                 {userRole === 'employer' && onRespondToDispute && (
@@ -365,6 +366,47 @@ const JobCard = ({
                           </div>
                         </div>
 
+                        {/* UPI Details Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-b border-slate-200/50 pb-3">
+                          <div>
+                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker UPI ID</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono font-bold text-slate-800 text-[11px] break-all">
+                                {workerProfile.upiId || 'Not Provided'}
+                              </span>
+                              {workerProfile.upiId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(workerProfile.upiId);
+                                    setUpiCopied(true);
+                                    setTimeout(() => setUpiCopied(false), 2000);
+                                  }}
+                                  className="text-[9px] font-extrabold text-primary hover:text-primary-dark transition-colors focus:outline-none flex items-center gap-0.5 bg-primary/5 hover:bg-primary/10 px-1.5 py-0.5 rounded cursor-pointer"
+                                >
+                                  {upiCopied ? 'Copied!' : 'Copy'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {workerProfile.upiQrUrl && (
+                            <div>
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Scan UPI QR Code</span>
+                              <div className="w-20 h-20 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm flex items-center justify-center p-1">
+                                <img 
+                                  src={workerProfile.upiQrUrl} 
+                                  alt="Worker UPI QR" 
+                                  className="max-w-full max-h-full object-contain cursor-zoom-in"
+                                  onClick={() => {
+                                    const newTab = window.open();
+                                    newTab.document.write(`<img src="${workerProfile.upiQrUrl}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Payment Info Display if already paid/marked paid */}
                         {(status === 'EMPLOYER_MARKED_PAID' || status === 'DISPUTED' || status === 'COMPLETED' || status === 'completed') && job.paymentAmount && (
                           <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-3 text-[11px]">
@@ -373,8 +415,10 @@ const JobCard = ({
                               <span className="font-extrabold text-slate-800">₹{job.paymentAmount}</span>
                             </div>
                             <div>
-                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">UPI Ref ID</span>
-                              <span className="font-mono font-bold text-slate-850 break-all">{job.transactionReferenceId}</span>
+                              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Payment Status</span>
+                              <span className="font-bold text-slate-800 uppercase text-[10px]">
+                                {status === 'COMPLETED' || status === 'completed' ? 'Verified' : 'Awaiting worker confirm'}
+                              </span>
                             </div>
                           </div>
                         )}

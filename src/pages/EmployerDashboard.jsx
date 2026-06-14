@@ -9,9 +9,47 @@ import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
-import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter } from 'lucide-react';
+import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.webp';
+
+// Client-side image compression helper using HTML5 Canvas
+const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Compress to jpeg format with 0.7 quality
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressedBase64);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
 
 const EmployerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
@@ -89,8 +127,9 @@ const EmployerDashboard = () => {
   const [photoSuccess, setPhotoSuccess] = useState('');
 
   // Re-verification states
-  const [reAadhaarNumber, setReAadhaarNumber] = useState('');
-  const [reAadhaarPhoto, setReAadhaarPhoto] = useState('');
+  const [reUpiId, setReUpiId] = useState('');
+  const [reUpiQr, setReUpiQr] = useState('');
+  const [reSelfie, setReSelfie] = useState('');
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
   const [reVerifError, setReVerifError] = useState('');
@@ -101,9 +140,11 @@ const EmployerDashboard = () => {
   const [payWorkerId, setPayWorkerId] = useState('');
   const [payJobTitle, setPayJobTitle] = useState('');
   const [paymentAmountInput, setPaymentAmountInput] = useState('');
-  const [transactionIdInput, setTransactionIdInput] = useState('');
   const [payError, setPayError] = useState('');
   const [payLoading, setPayLoading] = useState(false);
+  const [payWorkerProfile, setPayWorkerProfile] = useState(null);
+  const [loadingPayWorker, setLoadingPayWorker] = useState(false);
+  const [upiCopied, setUpiCopied] = useState(false);
 
   // Dispute Response Modal States
   const [isDisputeResponseOpen, setIsDisputeResponseOpen] = useState(false);
@@ -232,31 +273,47 @@ const EmployerDashboard = () => {
     setReVerifError('');
     setReVerifSuccess('');
     
-    if (reAadhaarNumber.length !== 12 || !/^[0-9]+$/.test(reAadhaarNumber)) {
-      setReVerifError('Aadhaar number must be exactly 12 digits.');
+    // UPI ID simple format check
+    const upiRegex = /^[\w.-]+@[\w.-]+$/;
+    if (!upiRegex.test(reUpiId.trim())) {
+      setReVerifError('Please enter a valid UPI ID (e.g. username@bank).');
       return;
     }
-    if (!reAadhaarPhoto) {
-      setReVerifError('Please select or upload your Aadhaar photo.');
+
+    if (!reSelfie) {
+      setReVerifError('Selfie photo is required.');
+      return;
+    }
+
+    if (!reUpiQr) {
+      setReVerifError('UPI QR code photo is required.');
       return;
     }
 
     setReVerifLoading(true);
     try {
+      // Compress images
+      const compressedSelfie = await compressImage(reSelfie, 800, 800);
+      const compressedUpiQr = await compressImage(reUpiQr, 800, 800);
+
       await authService.saveUserProfile(currentUser.uid, {
-        aadhaarNumber: reAadhaarNumber,
-        aadhaarPhotoUrl: reAadhaarPhoto,
+        upiId: reUpiId.trim(),
+        upiQrUrl: compressedUpiQr,
+        upiVerified: false,
+        selfieUrl: compressedSelfie,
+        selfieVerified: false,
         verificationStatus: 'pending',
         verified: false
       });
-      setReVerifSuccess('Identity verification re-submitted successfully!');
-      setReAadhaarNumber('');
-      setReAadhaarPhoto('');
+      setReVerifSuccess('Trust verification details re-submitted successfully!');
+      setReUpiId('');
+      setReUpiQr('');
+      setReSelfie('');
       await reloadProfile();
       setReVerifLoading(false);
     } catch (err) {
       console.error(err);
-      setReVerifError('Failed to re-submit identity verification.');
+      setReVerifError('Failed to re-submit trust verification details.');
       setReVerifLoading(false);
     }
   };
@@ -391,6 +448,7 @@ const EmployerDashboard = () => {
   const loadEmployerData = async () => {
     try {
       setLoading(true);
+      await jobService.checkPendingPaymentConfirmationsSim(currentUser.uid, currentUser.role);
       const jobsData = await jobService.getMyJobs(currentUser.uid);
       setMyJobs(jobsData);
       setLoading(false);
@@ -539,7 +597,20 @@ const EmployerDashboard = () => {
 
   // Delete Job
   const handleDeleteJob = async (jobId) => {
-    if (window.confirm(t('confirmDeleteJob'))) {
+    const job = myJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    if (job.selectedWorkers && job.selectedWorkers.length > 0) {
+      alert("Cannot delete job because a worker has already been accepted.");
+      return;
+    }
+
+    let confirmMsg = t('confirmDeleteJob') || "Are you sure you want to delete this job post?";
+    if (job.applicants && job.applicants.length > 0) {
+      confirmMsg = "Warning: Workers have already applied to this job post. Are you sure you want to delete it?";
+    }
+
+    if (window.confirm(confirmMsg)) {
       try {
         setLoading(true);
         await jobService.deleteJob(jobId);
@@ -547,6 +618,7 @@ const EmployerDashboard = () => {
         setLoading(false);
       } catch (err) {
         console.error(err);
+        alert(err.message || "Failed to delete job.");
         setLoading(false);
       }
     }
@@ -558,18 +630,26 @@ const EmployerDashboard = () => {
     setPayWorkerId(workerId);
     setPayJobTitle(jobTitle);
     setPaymentAmountInput(job ? job.payment : '');
-    setTransactionIdInput('');
     setPayError('');
+    setPayWorkerProfile(null);
     setIsPayModalOpen(true);
+
+    if (workerId) {
+      try {
+        setLoadingPayWorker(true);
+        const profile = await authService.getCurrentUser(workerId);
+        setPayWorkerProfile(profile);
+        setLoadingPayWorker(false);
+      } catch (err) {
+        console.error("Error fetching worker profile for payment modal:", err);
+        setLoadingPayWorker(false);
+      }
+    }
   };
 
   const submitPaymentDetails = async (e) => {
     e.preventDefault();
     setPayError('');
-    if (!transactionIdInput.trim()) {
-      setPayError("UPI Transaction Reference ID cannot be empty.");
-      return;
-    }
     const amountNum = Number(paymentAmountInput);
     if (isNaN(amountNum) || amountNum <= 0) {
       setPayError("Payment Amount must be a positive number.");
@@ -577,7 +657,7 @@ const EmployerDashboard = () => {
     }
     try {
       setPayLoading(true);
-      await jobService.markJobAsPaid(payJobId, amountNum, transactionIdInput);
+      await jobService.markJobAsPaid(payJobId, amountNum);
       await loadEmployerData();
       setPayLoading(false);
       setIsPayModalOpen(false);
@@ -1083,10 +1163,10 @@ const EmployerDashboard = () => {
                 <div className="bg-red-50/50 border border-red-200 rounded-xl p-5 shadow-sm space-y-4">
                   <h4 className="font-extrabold text-red-800 text-sm flex items-center gap-1.5">
                     <ShieldAlert size={18} />
-                    Re-Submit Identity Verification (Aadhaar)
+                    Re-Submit Trust Verification Details
                   </h4>
                   <p className="text-slate-650 text-xs leading-relaxed">
-                    Your previous identity verification was rejected by the admin. Please upload a clear photo of your Aadhaar card and verify your 12-digit Aadhaar number to request re-approval.
+                    Your previous trust verification details were rejected. Please update your UPI ID, capture a new Selfie, upload your UPI QR code and submit for admin re-approval.
                   </p>
                   
                   {reVerifError && (
@@ -1100,57 +1180,85 @@ const EmployerDashboard = () => {
                     </div>
                   )}
 
-                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2.5">
+                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="reAadhaar" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          12-Digit Aadhaar Number
+                        <label htmlFor="reUpiIdInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          UPI ID
                         </label>
                         <input
-                          id="reAadhaar"
+                          id="reUpiIdInput"
                           type="text"
-                          placeholder="1234 5678 9012"
-                          value={reAadhaarNumber}
-                          onChange={(e) => setReAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
-                          maxLength={12}
+                          placeholder="username@bank"
+                          value={reUpiId}
+                          onChange={(e) => setReUpiId(e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                           required
                         />
                       </div>
                       
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          Selfie Verification
+                        </label>
+                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            onChange={(e) => handleFileChange(e, setReSelfie)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            required={!reSelfie}
+                          />
+                          {reSelfie ? (
+                            <div className="text-center w-full">
+                              <img src={reSelfie} alt="Re-Selfie preview" className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200" />
+                              <span className="text-[9px] text-green-600 font-semibold block mt-1">✓ Selfie Captured</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={14} className="text-slate-400" />
+                              <span className="text-xs font-semibold text-slate-550">Take Selfie</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          Upload UPI QR Code Photo
+                        </label>
+                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileChange(e, setReUpiQr)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            required={!reUpiQr}
+                          />
+                          {reUpiQr ? (
+                            <div className="text-center w-full">
+                              <img src={reUpiQr} alt="Re-UPI QR preview" className="max-h-12 mx-auto rounded border border-slate-200" />
+                              <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Uploaded</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={14} className="text-slate-400" />
+                              <span className="text-xs font-semibold text-slate-550">Select QR Code</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
                       <button
                         type="submit"
                         disabled={reVerifLoading}
                         className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-auto"
                       >
-                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Aadhaar Info'}
+                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
                       </button>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                        Upload Aadhaar Card Photo
-                      </label>
-                      <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileChange(e, setReAadhaarPhoto)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          required={!reAadhaarPhoto}
-                        />
-                        {reAadhaarPhoto ? (
-                          <div className="text-center w-full">
-                            <img src={reAadhaarPhoto} alt="Re-Aadhaar preview" className="max-h-16 mx-auto rounded border border-slate-200 mb-0.5" />
-                            <span className="text-[9px] text-green-600 font-semibold block">✓ Aadhaar Card Uploaded</span>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="text-xs font-semibold text-slate-550">Select Aadhaar Image</span>
-                            <span className="text-[9px] text-slate-400">PNG or JPG formats</span>
-                          </>
-                        )}
-                      </div>
                     </div>
                   </form>
                 </div>
@@ -1326,7 +1434,7 @@ const EmployerDashboard = () => {
                           <Phone size={13} /> {t('callWorker')}
                         </a>
                         <a 
-                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on WorkLink. Please reply.`}
+                          href={`https://wa.me/${app.workerPhone?.replace(/[^0-9]/g, '')}?text=Hello ${app.workerName}, you have been selected for my job post on Jobink. Please reply.`}
                           target="_blank"
                           rel="noreferrer"
                           className="flex-1 text-center bg-[#25D366] text-white font-semibold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1.5 touch-target cursor-pointer"
@@ -1744,12 +1852,75 @@ const EmployerDashboard = () => {
       >
         <div className="flex flex-col gap-4 text-left">
           <p className="text-slate-500 text-xs leading-relaxed font-medium">
-            Provide the payment details to confirm you have transferred the funds to the worker. WorkLink is built on trust—please ensure the transaction reference ID is accurate.
+            Please transfer the job amount directly to the worker's UPI account. Once completed, click <strong>Confirm Paid</strong> to notify the worker. They will verify receipt to close the job.
           </p>
 
           {payError && (
             <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
               {payError}
+            </div>
+          )}
+
+          {loadingPayWorker ? (
+            <div className="text-slate-400 animate-pulse text-xs font-semibold py-4 text-center">
+              Loading worker UPI details...
+            </div>
+          ) : payWorkerProfile ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-2.5">
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker</span>
+                  <span className="font-bold text-slate-800 text-sm">{payWorkerProfile.name}</span>
+                </div>
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Phone Number</span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px]">{payWorkerProfile.phone || 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker UPI ID</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="font-mono font-bold text-slate-800 text-[11px] break-all">
+                      {payWorkerProfile.upiId || 'Not Provided'}
+                    </span>
+                    {payWorkerProfile.upiId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(payWorkerProfile.upiId);
+                          setUpiCopied(true);
+                          setTimeout(() => setUpiCopied(false), 2000);
+                        }}
+                        className="text-[9px] font-extrabold text-primary hover:text-primary-dark transition-colors focus:outline-none flex items-center gap-0.5 bg-primary/5 hover:bg-primary/10 px-1.5 py-0.5 rounded cursor-pointer"
+                      >
+                        {upiCopied ? 'Copied!' : 'Copy'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {payWorkerProfile.upiQrUrl && (
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Scan QR Code</span>
+                    <div className="w-18 h-18 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm flex items-center justify-center p-1">
+                      <img 
+                        src={payWorkerProfile.upiQrUrl} 
+                        alt="Worker UPI QR" 
+                        className="max-w-full max-h-full object-contain cursor-zoom-in"
+                        onClick={() => {
+                          const newTab = window.open();
+                          newTab.document.write(`<img src="${payWorkerProfile.upiQrUrl}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-red-550 text-xs font-semibold py-2 text-center">
+              Failed to load worker details.
             </div>
           )}
 
@@ -1765,34 +1936,18 @@ const EmployerDashboard = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="paymentAmountInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Payment Amount (₹)</label>
-                <input
-                  id="paymentAmountInput"
-                  type="number"
-                  placeholder="e.g. 500"
-                  value={paymentAmountInput}
-                  onChange={(e) => setPaymentAmountInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-primary"
-                  required
-                  disabled={payLoading}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="transactionIdInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">UPI Transaction Reference ID</label>
-                <input
-                  id="transactionIdInput"
-                  type="text"
-                  placeholder="e.g. 123456789012"
-                  value={transactionIdInput}
-                  onChange={(e) => setTransactionIdInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 tracking-wider focus:border-primary"
-                  required
-                  disabled={payLoading}
-                />
-              </div>
+            <div>
+              <label htmlFor="paymentAmountInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Payment Amount (₹)</label>
+              <input
+                id="paymentAmountInput"
+                type="number"
+                placeholder="e.g. 500"
+                value={paymentAmountInput}
+                onChange={(e) => setPaymentAmountInput(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-primary"
+                required
+                disabled={payLoading}
+              />
             </div>
 
             <div className="flex gap-2 pt-2">

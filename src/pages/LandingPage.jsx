@@ -57,7 +57,7 @@ const LandingPage = () => {
               <Users size={16} />
             </div>
             <span className="font-extrabold text-xl text-[#2563EB] tracking-tight">
-              WorkLink
+              Jobink
             </span>
           </div>
           
@@ -146,7 +146,7 @@ const LandingPage = () => {
               <div className="relative w-full max-w-md lg:max-w-none">
                 <img 
                   src="/hero_illustration.webp" 
-                  alt="WorkLink Illustration" 
+                  alt="Jobink Illustration" 
                   className="w-full h-auto rounded-3xl object-cover bg-white" 
                 />
               </div>
@@ -454,7 +454,7 @@ const LandingPage = () => {
         <section id="trust" className="py-16 bg-[#F4F9FF] border-t border-blue-50 px-6">
           <div className="max-w-6xl mx-auto text-center flex flex-col gap-10">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              {t('whyTrustWorkLink') || 'Why Trust WorkLink?'}
+              {t('whyTrustJobink') || 'Why Trust Jobink?'}
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
@@ -465,7 +465,7 @@ const LandingPage = () => {
                   <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-xs mb-1">{t('trustAadhaarTitle') || 'Aadhaar Verified Users'}</h4>
+                  <h4 className="font-bold text-slate-900 text-xs mb-1">{t('trustAadhaarTitle') || 'UPI Verified Users'}</h4>
                   <p className="text-[10px] text-slate-400 leading-normal font-semibold">{t('trustAadhaarDesc') || 'Every user is verified for your safety.'}</p>
                 </div>
               </div>
@@ -516,7 +516,7 @@ const LandingPage = () => {
             <div className="w-6 h-6 rounded-full bg-[#2563EB] flex items-center justify-center text-white">
               <Users size={12} />
             </div>
-            <span className="font-bold text-md text-[#2563EB]">WorkLink</span>
+            <span className="font-bold text-md text-[#2563EB]">Jobink</span>
           </div>
           
           <div className="flex flex-wrap items-center justify-center gap-6 text-[11px] font-bold text-slate-400">
@@ -527,7 +527,7 @@ const LandingPage = () => {
           </div>
           
           <span className="text-[10px] text-slate-400 font-semibold">
-            &copy; {new Date().getFullYear()} WorkLink. All rights reserved.
+            &copy; {new Date().getFullYear()} Jobink. All rights reserved.
           </span>
         </div>
       </footer>

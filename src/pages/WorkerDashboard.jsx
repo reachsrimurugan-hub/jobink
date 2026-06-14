@@ -10,8 +10,46 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 import ProfileViewModal from '../components/ProfileViewModal';
 import Modal from '../components/Modal';
-import { MapPin, Briefcase, Bell, User, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone } from 'lucide-react';
+import { MapPin, Briefcase, Bell, User, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+// Client-side image compression helper using HTML5 Canvas
+const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Compress to jpeg format with 0.7 quality
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressedBase64);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
 
 const WorkerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile } = useAuth();
@@ -84,8 +122,9 @@ const WorkerDashboard = () => {
   const [photoSuccess, setPhotoSuccess] = useState('');
 
   // Re-verification states
-  const [reAadhaarNumber, setReAadhaarNumber] = useState('');
-  const [reAadhaarPhoto, setReAadhaarPhoto] = useState('');
+  const [reUpiId, setReUpiId] = useState('');
+  const [reUpiQr, setReUpiQr] = useState('');
+  const [reSelfie, setReSelfie] = useState('');
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
   const [reVerifError, setReVerifError] = useState('');
@@ -196,31 +235,47 @@ const WorkerDashboard = () => {
     setReVerifError('');
     setReVerifSuccess('');
     
-    if (reAadhaarNumber.length !== 12 || !/^[0-9]+$/.test(reAadhaarNumber)) {
-      setReVerifError('Aadhaar number must be exactly 12 digits.');
+    // UPI ID simple format check
+    const upiRegex = /^[\w.-]+@[\w.-]+$/;
+    if (!upiRegex.test(reUpiId.trim())) {
+      setReVerifError('Please enter a valid UPI ID (e.g. username@bank).');
       return;
     }
-    if (!reAadhaarPhoto) {
-      setReVerifError('Please select or upload your Aadhaar photo.');
+
+    if (!reSelfie) {
+      setReVerifError('Selfie photo is required.');
+      return;
+    }
+
+    if (!reUpiQr) {
+      setReVerifError('UPI QR code photo is required.');
       return;
     }
 
     setReVerifLoading(true);
     try {
+      // Compress images
+      const compressedSelfie = await compressImage(reSelfie, 800, 800);
+      const compressedUpiQr = await compressImage(reUpiQr, 800, 800);
+
       await authService.saveUserProfile(currentUser.uid, {
-        aadhaarNumber: reAadhaarNumber,
-        aadhaarPhotoUrl: reAadhaarPhoto,
+        upiId: reUpiId.trim(),
+        upiQrUrl: compressedUpiQr,
+        upiVerified: false,
+        selfieUrl: compressedSelfie,
+        selfieVerified: false,
         verificationStatus: 'pending',
         verified: false
       });
-      setReVerifSuccess('Identity verification re-submitted successfully!');
-      setReAadhaarNumber('');
-      setReAadhaarPhoto('');
+      setReVerifSuccess('Trust verification details re-submitted successfully!');
+      setReUpiId('');
+      setReUpiQr('');
+      setReSelfie('');
       await reloadProfile();
       setReVerifLoading(false);
     } catch (err) {
       console.error(err);
-      setReVerifError('Failed to re-submit identity verification.');
+      setReVerifError('Failed to re-submit trust verification details.');
       setReVerifLoading(false);
     }
   };
@@ -332,9 +387,9 @@ const WorkerDashboard = () => {
     }
   }, [filterCity, filterArea]);
 
-  // Load worker applications
   const loadApplications = useCallback(async () => {
     try {
+      await jobService.checkPendingPaymentConfirmationsSim(currentUser.uid, currentUser.role);
       const data = await applicationService.getWorkerApplications(currentUser.uid);
       setMyApplications(data);
     } catch (err) {
@@ -727,7 +782,7 @@ const WorkerDashboard = () => {
                   <h3 className="font-extrabold text-slate-800 text-sm">💬 Query Admin</h3>
                 </div>
                 <p className="text-slate-500 text-xs leading-relaxed">
-                  Have any queries or need assistance? Type your message below to notify the WorkLink admin directly.
+                  Have any queries or need assistance? Type your message below to notify the Jobink admin directly.
                 </p>
 
                 {queryError && (
@@ -926,8 +981,8 @@ const WorkerDashboard = () => {
                                     <span className="font-extrabold text-slate-800 text-sm">₹{app.paymentAmount || app.jobPayment}</span>
                                   </div>
                                   <div>
-                                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Transaction ID</span>
-                                    <span className="font-mono font-bold text-slate-800">{app.transactionReferenceId || 'N/A'}</span>
+                                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Payment Method</span>
+                                    <span className="font-bold text-slate-800 text-xs">Direct UPI</span>
                                   </div>
                                 </div>
                                 <div className="flex gap-2 pt-1 border-t border-slate-200/50">
@@ -1050,10 +1105,10 @@ const WorkerDashboard = () => {
                 <div className="bg-red-50/50 border border-red-200 rounded-xl p-5 shadow-sm space-y-4">
                   <h4 className="font-extrabold text-red-800 text-sm flex items-center gap-1.5">
                     <ShieldAlert size={18} />
-                    Re-Submit Identity Verification (Aadhaar)
+                    Re-Submit Trust Verification Details
                   </h4>
-                  <p className="text-slate-650 text-xs leading-relaxed">
-                    Your previous identity verification was rejected by the admin. Please upload a clear photo of your Aadhaar card and verify your 12-digit Aadhaar number to request re-approval.
+                  <p className="text-slate-655 text-xs leading-relaxed">
+                    Your previous trust verification details were rejected. Please update your UPI ID, capture a new Selfie, upload your UPI QR code and submit for admin re-approval.
                   </p>
                   
                   {reVerifError && (
@@ -1067,94 +1122,170 @@ const WorkerDashboard = () => {
                     </div>
                   )}
 
-                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-2.5">
+                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="reAadhaar" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          12-Digit Aadhaar Number
+                        <label htmlFor="reUpiIdInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          UPI ID
                         </label>
                         <input
-                          id="reAadhaar"
+                          id="reUpiIdInput"
                           type="text"
-                          placeholder="1234 5678 9012"
-                          value={reAadhaarNumber}
-                          onChange={(e) => setReAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
-                          maxLength={12}
+                          placeholder="username@bank"
+                          value={reUpiId}
+                          onChange={(e) => setReUpiId(e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                           required
                         />
                       </div>
                       
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          Selfie Verification
+                        </label>
+                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            onChange={(e) => handleFileChange(e, setReSelfie)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            required={!reSelfie}
+                          />
+                          {reSelfie ? (
+                            <div className="text-center w-full">
+                              <img src={reSelfie} alt="Re-Selfie preview" className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200" />
+                              <span className="text-[9px] text-green-600 font-semibold block mt-1">✓ Selfie Captured</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={14} className="text-slate-400" />
+                              <span className="text-xs font-semibold text-slate-500">Take Selfie</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+                          Upload UPI QR Code Photo
+                        </label>
+                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleFileChange(e, setReUpiQr)}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            required={!reUpiQr}
+                          />
+                          {reUpiQr ? (
+                            <div className="text-center w-full">
+                              <img src={reUpiQr} alt="Re-UPI QR preview" className="max-h-12 mx-auto rounded border border-slate-200" />
+                              <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Uploaded</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Upload size={14} className="text-slate-400" />
+                              <span className="text-xs font-semibold text-slate-550">Select QR Code</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
                       <button
                         type="submit"
                         disabled={reVerifLoading}
                         className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-auto"
                       >
-                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Aadhaar Info'}
+                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
                       </button>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                        Upload Aadhaar Card Photo
-                      </label>
-                      <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileChange(e, setReAadhaarPhoto)}
-                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          required={!reAadhaarPhoto}
-                        />
-                        {reAadhaarPhoto ? (
-                          <div className="text-center w-full">
-                            <img src={reAadhaarPhoto} alt="Re-Aadhaar preview" className="max-h-16 mx-auto rounded border border-slate-200 mb-0.5" />
-                            <span className="text-[9px] text-green-600 font-semibold block">✓ Aadhaar Card Uploaded</span>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="text-xs font-semibold text-slate-500">Select Aadhaar Image</span>
-                            <span className="text-[9px] text-slate-400">PNG or JPG formats</span>
-                          </>
-                        )}
-                      </div>
                     </div>
                   </form>
                 </div>
               )}
 
               {/* User Bio Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row items-center gap-4">
-                <img 
-                  src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
-                  alt={currentUser.name || t('worker')} 
-                  className="w-20 h-20 rounded-full object-cover border border-slate-200"
-                />
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="flex justify-center sm:justify-start items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileSuccess('');
-                        setProfileError('');
-                        setIsEditProfileOpen(true);
-                      }}
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <Edit3 size={13} className="text-slate-400" />
-                      <span>{t('editProfile')}</span>
-                    </button>
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <img 
+                    src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
+                    alt={currentUser.name || t('worker')} 
+                    className="w-20 h-20 rounded-full object-cover border border-slate-200"
+                  />
+                  <div className="flex-1 text-center sm:text-left">
+                    <div className="flex justify-center sm:justify-start items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-800 text-lg leading-tight">{currentUser.name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileSuccess('');
+                          setProfileError('');
+                          setIsEditProfileOpen(true);
+                        }}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <Edit3 size={13} className="text-slate-400" />
+                        <span>{t('editProfile')}</span>
+                      </button>
+                    </div>
+                    <span className="text-xs text-slate-500 font-mono block mt-1">{currentUser.phone}</span>
+                    {currentUser.description && (
+                      <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed">
+                        "{currentUser.description}"
+                      </p>
+                    )}
+                    <div className="flex justify-center sm:justify-start items-center gap-2.5 mt-2.5 text-xs font-medium">
+                      <div className="flex items-center gap-1">
+                        <RatingStars rating={currentUser.averageRating || currentUser.rating || 0} size={15} />
+                        <span className="text-xs text-slate-400 font-medium">({currentUser.totalReviews || currentUser.ratingCount || 0} reviews)</span>
+                      </div>
+                      <span className="text-slate-300">|</span>
+                      <div>
+                        <span className="text-slate-400 font-bold uppercase text-[9px] mr-1">Completed Jobs:</span>
+                        <strong className="text-slate-700">{currentUser.completedJobs || 0}</strong>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-xs text-slate-500 font-mono block mt-1">{currentUser.phone}</span>
-                  {currentUser.description && (
-                    <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed">
-                      "{currentUser.description}"
-                    </p>
-                  )}
-                  <div className="flex justify-center sm:justify-start items-center gap-2 mt-2.5">
-                    <RatingStars rating={currentUser.rating} size={15} />
-                    <span className="text-xs text-slate-400 font-medium">{t('reviewsCount', { count: currentUser.ratingCount || 0 })}</span>
+                </div>
+
+                {/* Trust Score & Verification Status */}
+                <div className="border-t border-slate-100 pt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400 font-bold uppercase text-[10px]">Trust Score:</span>
+                    <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
+                      (currentUser.trustScore || 0) >= 60 ? 'bg-green-50 text-green-700 border border-green-200' :
+                      (currentUser.trustScore || 0) >= 40 ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                      'bg-red-50 text-red-700 border border-red-200'
+                    }`}>
+                      {currentUser.trustScore || 0}/100
+                    </span>
+                  </div>
+
+                  {/* Checklist Badges */}
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+                      currentUser.phoneVerified || currentUser.phone
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}>
+                      {currentUser.phoneVerified || currentUser.phone ? '✅' : '❌'} Phone Verified
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+                      currentUser.upiVerified
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}>
+                      {currentUser.upiVerified ? '✅' : '❌'} UPI Verified
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+                      currentUser.selfieVerified
+                        ? 'bg-green-50 text-green-700 border-green-200'
+                        : 'bg-slate-50 text-slate-400 border-slate-200'
+                    }`}>
+                      {currentUser.selfieVerified ? '✅' : '❌'} Selfie Verified
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1547,7 +1678,7 @@ const WorkerDashboard = () => {
       >
         <div className="flex flex-col gap-4 text-left">
           <p className="text-slate-500 text-xs leading-relaxed font-medium">
-            You are raising a payment dispute. The WorkLink admin will review the job details, UPI reference, and employer comments to resolve the dispute.
+            You are raising a payment dispute. The Jobink admin will review the job details, UPI reference, and employer comments to resolve the dispute.
           </p>
 
           {disputeError && (

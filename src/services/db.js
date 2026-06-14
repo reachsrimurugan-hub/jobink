@@ -11,7 +11,8 @@ import {
   addDoc, 
   onSnapshot,
   increment,
-  limit
+  limit,
+  arrayUnion
 } from 'firebase/firestore';
 
 import { 
@@ -30,6 +31,97 @@ const profileCache = new Map();
 // Helper to clear profile cache on logout
 export const clearProfileCache = () => {
   profileCache.clear();
+};
+
+// Centralized Trust Score Calculation
+export const calculateTrustScore = (user) => {
+  let score = 0;
+  if (user.phoneVerified) score += 20;
+  if (user.upiVerified) score += 20;
+  if (user.selfieUrl) score += 20; // Selfie uploaded
+  const completed = user.completedJobs || 0;
+  score += completed * 2;
+  const rating = user.rating || user.averageRating || 0;
+  if (rating >= 4.0) score += 20; // High Rating
+  return Math.min(score, 100);
+};
+
+// Recalculates user's verified status, verificationStatus and trustScore
+export const recalculateUserTrustAndVerification = async (uid) => {
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+  if (!userSnap.exists()) return null;
+  const user = userSnap.data();
+
+  const isPhoneVerified = user.phoneVerified === true || !!user.phone;
+  const isUpiVerified = user.upiVerified === true;
+  const isSelfieVerified = user.selfieVerified === true;
+
+  const verified = isPhoneVerified && isUpiVerified && isSelfieVerified;
+  
+  let verificationStatus = user.verificationStatus || 'unverified';
+  if (verified) {
+    verificationStatus = 'verified';
+  } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiQrUrl) || (!isSelfieVerified && user.selfieUrl)) {
+    if (user.verificationStatus !== 'rejected') {
+      verificationStatus = 'pending';
+    }
+  }
+
+  const updatedUser = {
+    ...user,
+    phoneVerified: isPhoneVerified,
+    verified,
+    verificationStatus
+  };
+
+  const trustScore = calculateTrustScore(updatedUser);
+
+  const updates = {
+    phoneVerified: isPhoneVerified,
+    verified,
+    verificationStatus,
+    trustScore
+  };
+
+  await updateDoc(userRef, updates);
+  profileCache.delete(uid); // Invalidate cached profile
+  return { ...user, ...updates };
+};
+
+// Centralized user flagging rule checks
+export const checkAndFlagUser = async (uid) => {
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+  if (!userSnap.exists()) return;
+  const user = userSnap.data();
+
+  let shouldFlag = false;
+  let reasons = [];
+
+  if ((user.disputesRaised || 0) >= 3) {
+    shouldFlag = true;
+    reasons.push(`Multiple disputes raised (${user.disputesRaised})`);
+  }
+  if ((user.disputesLost || 0) >= 2) {
+    shouldFlag = true;
+    reasons.push(`Repeated dispute losses (${user.disputesLost})`);
+  }
+
+  const ratingCount = user.ratingCount || user.totalReviews || 0;
+  const currentRating = user.rating || user.averageRating || 0;
+  if (ratingCount >= 3 && currentRating < 3.0) {
+    shouldFlag = true;
+    reasons.push(`Low rating: ${currentRating} stars (${ratingCount} reviews)`);
+  }
+
+  if (shouldFlag) {
+    await updateDoc(userRef, {
+      isFlagged: true,
+      flagReason: reasons.join(", ")
+    });
+    profileCache.delete(uid);
+  }
 };
 
 const executeTransition = async (functionName, payload, fallbackFn) => {
@@ -162,10 +254,6 @@ export const authService = {
       updatedAt: new Date().toISOString()
     };
     
-    if (profileData.verificationStatus !== undefined) {
-      payload.verified = profileData.verificationStatus === 'verified';
-    }
-    
     // Split city and area for query parsing
     if (profileData.location) {
       const parts = profileData.location.split(',').map(s => s.trim());
@@ -173,7 +261,6 @@ export const authService = {
       payload.area = parts[1] || '';
     }
 
-    let result;
     if (userSnap.exists()) {
       const existingData = userSnap.data();
       // Ensure trust parameters are initialized if they do not exist
@@ -184,14 +271,10 @@ export const authService = {
       if (existingData.disputesLost === undefined) trustUpdates.disputesLost = 0;
       
       await updateDoc(userRef, { ...payload, ...trustUpdates });
-      result = { uid, ...existingData, ...payload, ...trustUpdates };
     } else {
       payload.createdAt = new Date().toISOString();
       if (!payload.language) {
         payload.language = 'en';
-      }
-      if (payload.verified === undefined) {
-        payload.verified = false;
       }
       // Initialize trust system parameters
       payload.trustScore = 0;
@@ -200,10 +283,11 @@ export const authService = {
       payload.disputesLost = 0;
       
       await setDoc(userRef, payload);
-      result = { uid, ...payload };
     }
-    profileCache.set(uid, result);
-    return result;
+    
+    // Auto-recalculate trust score and verification status
+    const freshUser = await recalculateUserTrustAndVerification(uid);
+    return freshUser;
   },
 
   // Admin Queue for identity verification
@@ -225,10 +309,12 @@ export const authService = {
     
     await updateDoc(userRef, { 
       verificationStatus: status,
-      verified: isApproved
+      verified: isApproved,
+      upiVerified: isApproved,
+      selfieVerified: isApproved
     });
     
-    profileCache.delete(uid); // Invalidate cached profile
+    const freshUser = await recalculateUserTrustAndVerification(uid);
     
     // Notify the user in real-time
     await notificationService.addNotification(
@@ -236,9 +322,139 @@ export const authService = {
       isApproved ? "Profile Verified!" : "Profile Verification Failed",
       isApproved 
         ? "Your identity has been verified. You can now access all features of WorkLink."
-        : "Your identity proof was rejected by the admin. Please upload a clear photo of your Aadhaar card."
+        : "Your identity proof was rejected by the admin. Please check your uploaded Selfie and UPI details."
     );
+
+    if (freshUser) {
+      await notificationService.addNotification(
+        uid,
+        "Trust Score Updated",
+        `Your Trust Score has been updated to ${freshUser.trustScore}/100.`
+      );
+    }
     return true;
+  },
+
+  // Verify Selfie specifically
+  verifySelfie: async (uid, isApproved) => {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, { 
+      selfieVerified: isApproved,
+      verificationStatus: isApproved ? 'pending' : 'rejected'
+    });
+    
+    const freshUser = await recalculateUserTrustAndVerification(uid);
+    
+    await notificationService.addNotification(
+      uid,
+      isApproved ? "Selfie Verification Approved!" : "Selfie Verification Failed",
+      isApproved 
+        ? "Your profile selfie has been successfully verified. Trust Score updated."
+        : "Your selfie photo was rejected by the admin. Please upload a clear face photo."
+    );
+
+    if (freshUser) {
+      await notificationService.addNotification(
+        uid,
+        "Trust Score Updated",
+        `Your Trust Score has been updated to ${freshUser.trustScore}/100.`
+      );
+    }
+    return true;
+  },
+
+  // Verify UPI details specifically
+  verifyUpi: async (uid, isApproved) => {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, { 
+      upiVerified: isApproved,
+      verificationStatus: isApproved ? 'pending' : 'rejected'
+    });
+    
+    const freshUser = await recalculateUserTrustAndVerification(uid);
+    
+    await notificationService.addNotification(
+      uid,
+      isApproved ? "UPI Verification Approved!" : "UPI Verification Failed",
+      isApproved 
+        ? "Your UPI credentials and QR code have been approved. Trust Score updated."
+        : "Your UPI verification was rejected by the admin. Please check and upload valid UPI details."
+    );
+
+    if (freshUser) {
+      await notificationService.addNotification(
+        uid,
+        "Trust Score Updated",
+        `Your Trust Score has been updated to ${freshUser.trustScore}/100.`
+      );
+    }
+    return true;
+  },
+
+  // Get all flagged users for admin dashboard
+  getFlaggedUsers: async () => {
+    const q = query(
+      collection(db, 'users'),
+      where('isFlagged', '==', true)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+  },
+
+  // Unflag a user
+  unflagUser: async (uid) => {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      isFlagged: false,
+      flagReason: ""
+    });
+    profileCache.delete(uid);
+    return true;
+  },
+
+  // Run Trust Score Migration for all users
+  runTrustMigration: async () => {
+    const usersCol = collection(db, 'users');
+    const snapshot = await getDocs(usersCol);
+    let count = 0;
+    for (const docSnap of snapshot.docs) {
+      const user = docSnap.data();
+      const uid = docSnap.id;
+
+      const isPhoneVerified = user.phoneVerified === true || !!user.phone;
+      const isUpiVerified = user.upiVerified === true;
+      const isSelfieVerified = user.selfieVerified === true;
+
+      const verified = isPhoneVerified && isUpiVerified && isSelfieVerified;
+      
+      let verificationStatus = user.verificationStatus || 'unverified';
+      if (verified) {
+        verificationStatus = 'verified';
+      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiQrUrl) || (!isSelfieVerified && user.selfieUrl)) {
+        if (user.verificationStatus !== 'rejected') {
+          verificationStatus = 'pending';
+        }
+      }
+
+      const tempUser = {
+        ...user,
+        phoneVerified: isPhoneVerified,
+        verified,
+        verificationStatus
+      };
+
+      const score = calculateTrustScore(tempUser);
+
+      await updateDoc(doc(db, 'users', uid), {
+        phoneVerified: isPhoneVerified,
+        verified,
+        verificationStatus,
+        trustScore: score
+      });
+      count++;
+    }
+    profileCache.clear();
+    return count;
   },
 
   // Request phone number change (creates a request document in Firestore)
@@ -405,6 +621,36 @@ export const authService = {
 export const jobService = {
   // Post a new job
   createJob: async (jobData) => {
+    // Enforce limits and protections
+    const employerRef = doc(db, 'users', jobData.employerId);
+    const employerSnap = await getDoc(employerRef);
+    if (employerSnap.exists()) {
+      const employer = employerSnap.data();
+      const score = employer.trustScore || 0;
+
+      // Rule: High-Value Job Protection (>= 5000 requires score > 60)
+      if (Number(jobData.payment) >= 5000 && score <= 60) {
+        throw new Error("High-value jobs (₹5,000+) require a Trust Score above 60 to post.");
+      }
+
+      // Rule: New Users (score < 40) limit of max 2 posts/day
+      if (score < 40) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartStr = todayStart.toISOString();
+
+        const q = query(
+          collection(db, 'jobs'),
+          where('employerId', '==', jobData.employerId),
+          where('createdAt', '>=', todayStartStr)
+        );
+        const postedToday = await getDocs(q);
+        if (postedToday.size >= 2) {
+          throw new Error("New users (Trust Score < 40) are limited to 2 job postings per day.");
+        }
+      }
+    }
+
     const jobRef = collection(db, 'jobs');
     const payload = {
       ...jobData,
@@ -554,14 +800,42 @@ export const jobService = {
 
   // Delete job listing
   deleteJob: async (jobId) => {
-    await deleteDoc(doc(db, 'jobs', jobId));
+    const jobRef = doc(db, 'jobs', jobId);
+    const jobSnap = await getDoc(jobRef);
+    if (!jobSnap.exists()) throw new Error("Job not found");
+    const job = jobSnap.data();
+
+    // Deletion Rules: Employers can delete jobs only if no worker has been accepted yet.
+    if (job.selectedWorkers && job.selectedWorkers.length > 0) {
+      throw new Error("Cannot delete job because a worker has already been accepted.");
+    }
+
+    // Remove job from public listings
+    await deleteDoc(jobRef);
+
+    // Remove related applications
+    const q = query(collection(db, 'applications'), where('jobId', '==', jobId));
+    const querySnapshot = await getDocs(q);
+    const batchPromises = querySnapshot.docs.map(docSnap => deleteDoc(doc(db, 'applications', docSnap.id)));
+    await Promise.all(batchPromises);
+
+    // Log deletion event for admin review
+    await addDoc(collection(db, 'deletionLogs'), {
+      jobId,
+      title: job.title,
+      employerId: job.employerId,
+      employerName: job.employerName,
+      timestamp: new Date().toISOString(),
+      reason: "Employer deleted the job post"
+    });
+
     return true;
   },
 
   // Mark job as paid (Employer action)
-  markJobAsPaid: async (jobId, paymentAmount, transactionReferenceId) => {
+  markJobAsPaid: async (jobId, paymentAmount) => {
     const amountNum = Number(paymentAmount);
-    return executeTransition('markJobAsPaid', { jobId, paymentAmount: amountNum, transactionReferenceId }, async () => {
+    return executeTransition('markJobAsPaid', { jobId, paymentAmount: amountNum }, async () => {
       const jobRef = doc(db, 'jobs', jobId);
       const jobSnap = await getDoc(jobRef);
       if (!jobSnap.exists()) throw new Error("Job not found");
@@ -569,8 +843,8 @@ export const jobService = {
 
       await updateDoc(jobRef, { 
         status: 'EMPLOYER_MARKED_PAID',
+        paymentStatus: 'awaiting_worker_confirmation',
         paymentAmount: amountNum,
-        transactionReferenceId: transactionReferenceId.trim(),
         paidAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -580,7 +854,7 @@ export const jobService = {
       await addDoc(logRef, {
         action: 'EMPLOYER_MARKED_PAID',
         actorId: auth.currentUser?.uid || job.employerId,
-        details: `Employer marked paid. Ref ID: ${transactionReferenceId}, Amount: ₹${amountNum}.`,
+        details: `Employer marked paid. Amount: ₹${amountNum}. Awaiting worker confirmation.`,
         timestamp: new Date().toISOString()
       });
 
@@ -589,8 +863,8 @@ export const jobService = {
       if (targetWorker) {
         await notificationService.addNotification(
           targetWorker,
-          "Payment Processed",
-          `Employer marked payment for "${job.title}" as paid. Please verify details.`
+          "Payment Sent",
+          `Employer marked payment for "${job.title}" as paid. Please confirm receipt.`
         );
       }
 
@@ -611,23 +885,34 @@ export const jobService = {
         // Payment Confirmed Received (COMPLETED)
         await updateDoc(jobRef, {
           status: 'COMPLETED',
+          paymentStatus: 'confirmed',
           workerConfirmedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
 
-        // Update trust scores
+        // Update completed jobs & completedJobHistory
         const employerRef = doc(db, 'users', job.employerId);
         const workerRef = doc(db, 'users', workerId);
 
+        const historyItem = {
+          jobId,
+          title: job.title,
+          completedAt: new Date().toISOString()
+        };
+
         await updateDoc(employerRef, {
-          trustScore: increment(1),
-          completedJobs: increment(1)
+          completedJobs: increment(1),
+          completedJobHistory: arrayUnion(historyItem)
         });
 
         await updateDoc(workerRef, {
-          trustScore: increment(1),
-          completedJobs: increment(1)
+          completedJobs: increment(1),
+          completedJobHistory: arrayUnion(historyItem)
         });
+
+        // Recalculate trust scores
+        await recalculateUserTrustAndVerification(job.employerId);
+        await recalculateUserTrustAndVerification(workerId);
 
         // Activity log
         const logRef = collection(db, 'jobs', jobId, 'activityLogs');
@@ -650,6 +935,7 @@ export const jobService = {
         // Payment Not Received (DISPUTED)
         await updateDoc(jobRef, {
           status: 'DISPUTED',
+          paymentStatus: 'disputed',
           updatedAt: new Date().toISOString()
         });
 
@@ -678,6 +964,10 @@ export const jobService = {
           disputesRaised: increment(1)
         });
 
+        // Check flagging rules for low ratings/repeated dispute losses
+        await checkAndFlagUser(workerId);
+        await checkAndFlagUser(job.employerId);
+
         // Activity log
         const logRef = collection(db, 'jobs', jobId, 'activityLogs');
         await addDoc(logRef, {
@@ -704,6 +994,99 @@ export const jobService = {
         return { success: true, status: 'DISPUTED' };
       }
     });
+  },
+
+  checkPendingPaymentConfirmationsSim: async (uid, role) => {
+    try {
+      const q = query(
+        collection(db, 'jobs'),
+        where('status', '==', 'EMPLOYER_MARKED_PAID'),
+        where('paymentStatus', '==', 'awaiting_worker_confirmation'),
+        where(role === 'worker' ? 'workerId' : 'employerId', '==', uid)
+      );
+      const snap = await getDocs(q);
+      const now = new Date();
+      const fortyEightHoursMs = 48 * 60 * 60 * 1000;
+      const ninetySixHoursMs = 96 * 60 * 60 * 1000;
+
+      for (const jobDoc of snap.docs) {
+        const job = jobDoc.data();
+        const jobId = jobDoc.id;
+        const paidAtStr = job.paidAt || job.updatedAt;
+        if (!paidAtStr) continue;
+
+        const paidAt = new Date(paidAtStr);
+        const elapsed = now.getTime() - paidAt.getTime();
+
+        if (elapsed >= ninetySixHoursMs) {
+          if (!job.adminReviewRequired) {
+            await updateDoc(doc(db, 'jobs', jobId), {
+              adminReviewRequired: true,
+              updatedAt: now.toISOString()
+            });
+
+            // Activity log
+            await addDoc(collection(db, 'jobs', jobId, 'activityLogs'), {
+              action: 'ESCALATED_TO_ADMIN',
+              actorId: 'system',
+              details: 'Payment confirmation overdue by 96 hours. Escalated to admin review.',
+              timestamp: now.toISOString()
+            });
+
+            // Notify Admin
+            await notificationService.addNotification(
+              'admin',
+              "Payment Confirmation Overdue",
+              `Job "${job.title}" payment confirmation is overdue by 96 hours. Admin review required.`
+            );
+
+            // Notify Employer
+            await notificationService.addNotification(
+              job.employerId,
+              "Job Escalated to Admin",
+              `Your job "${job.title}" has been escalated to admin review because the worker has not confirmed payment in 96 hours.`
+            );
+
+            // Notify Worker
+            const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
+            if (targetWorker) {
+              await notificationService.addNotification(
+                targetWorker,
+                "Payment Confirmation Overdue",
+                `Your payment confirmation for "${job.title}" is overdue by 96 hours. Escalated to admin review.`
+              );
+            }
+          }
+        } else if (elapsed >= fortyEightHoursMs) {
+          if (!job.paymentReminderSent) {
+            await updateDoc(doc(db, 'jobs', jobId), {
+              paymentReminderSent: true,
+              updatedAt: now.toISOString()
+            });
+
+            // Activity log
+            await addDoc(collection(db, 'jobs', jobId, 'activityLogs'), {
+              action: 'PAYMENT_REMINDER_SENT',
+              actorId: 'system',
+              details: '48-hour reminder sent to worker.',
+              timestamp: now.toISOString()
+            });
+
+            // Notify Worker
+            const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
+            if (targetWorker) {
+              await notificationService.addNotification(
+                targetWorker,
+                "Action Required: Confirm Payment",
+                `Employer marked job "${job.title}" as paid 48 hours ago. Please confirm receipt or raise a dispute.`
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error running local payment verification check:", e);
+    }
   }
 };
 
@@ -893,7 +1276,6 @@ export const notificationService = {
 
 // --- REVIEW SERVICE ---
 export const reviewService = {
-  // Post review and recalculate target profile average rating score
   submitReview: async (reviewerId, reviewerName, receiverId, jobId, jobTitle, rating, comment) => {
     const payload = {
       reviewerId,
@@ -914,16 +1296,22 @@ export const reviewService = {
     const receiverSnap = await getDoc(receiverRef);
     if (receiverSnap.exists()) {
       const data = receiverSnap.data();
-      const currentCount = data.ratingCount || 0;
-      const currentRating = data.rating || 0;
+      const currentCount = data.ratingCount || data.totalReviews || 0;
+      const currentRating = data.rating || data.averageRating || 0;
       
       const newCount = currentCount + 1;
       const newRating = Number(((currentRating * currentCount + Number(rating)) / newCount).toFixed(1));
       
       await updateDoc(receiverRef, {
         ratingCount: newCount,
-        rating: newRating
+        rating: newRating,
+        totalReviews: newCount,
+        averageRating: newRating
       });
+
+      // Recalculate trust score and check auto flagging rules
+      await recalculateUserTrustAndVerification(receiverId);
+      await checkAndFlagUser(receiverId);
     }
     return true;
   },
@@ -1106,17 +1494,26 @@ export const disputeService = {
       const employerRef = doc(db, 'users', dispute.employerId);
       const workerRef = doc(db, 'users', dispute.workerId);
 
-      let employerTrustChange = 0;
-      let workerTrustChange = 0;
-      let workerCompletedChange = 0;
-      let workerDisputesLostChange = 0;
-      let employerCompletedChange = 0;
+      let disputesLostChange = 0;
+      let completedJobsChange = 0;
+
+      const historyItem = {
+        jobId: dispute.jobId,
+        title: job.title,
+        completedAt: new Date().toISOString()
+      };
 
       if (resolution === 'favor_worker') {
-        employerTrustChange = -1;
-        workerTrustChange = 1;
-        workerCompletedChange = 1;
-        employerCompletedChange = 1;
+        completedJobsChange = 1;
+
+        await updateDoc(employerRef, {
+          completedJobs: increment(completedJobsChange),
+          completedJobHistory: arrayUnion(historyItem)
+        });
+        await updateDoc(workerRef, {
+          completedJobs: increment(completedJobsChange),
+          completedJobHistory: arrayUnion(historyItem)
+        });
 
         await notificationService.addNotification(
           dispute.workerId,
@@ -1129,10 +1526,16 @@ export const disputeService = {
           `Admin resolved payment dispute for "${job.title}" in favor of worker. Your trust score is reduced.`
         );
       } else if (resolution === 'favor_employer') {
-        employerTrustChange = 1;
-        workerTrustChange = -1;
-        workerDisputesLostChange = 1;
-        employerCompletedChange = 1;
+        completedJobsChange = 1;
+        disputesLostChange = 1;
+
+        await updateDoc(employerRef, {
+          completedJobs: increment(completedJobsChange),
+          completedJobHistory: arrayUnion(historyItem)
+        });
+        await updateDoc(workerRef, {
+          disputesLost: increment(disputesLostChange)
+        });
 
         await notificationService.addNotification(
           dispute.workerId,
@@ -1158,16 +1561,13 @@ export const disputeService = {
         );
       }
 
-      // Apply trust changes
-      await updateDoc(employerRef, {
-        trustScore: increment(employerTrustChange),
-        completedJobs: increment(employerCompletedChange)
-      });
-      await updateDoc(workerRef, {
-        trustScore: increment(workerTrustChange),
-        completedJobs: increment(workerCompletedChange),
-        disputesLost: increment(workerDisputesLostChange)
-      });
+      // Check flagging rules for disputes
+      await checkAndFlagUser(dispute.workerId);
+      await checkAndFlagUser(dispute.employerId);
+
+      // Recalculate trust scores dynamically
+      await recalculateUserTrustAndVerification(dispute.employerId);
+      await recalculateUserTrustAndVerification(dispute.workerId);
 
       // Write activity log on job
       const logRef = collection(db, 'jobs', dispute.jobId, 'activityLogs');

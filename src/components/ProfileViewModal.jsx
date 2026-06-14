@@ -154,7 +154,7 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
           {/* User Profile Header Card */}
           <div className="bg-slate-50 border border-slate-200/60 p-4 rounded-xl flex items-center gap-4">
             <img 
-              src={profile.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
+              src={profile.profilePhotoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
               alt={profile.name} 
               className="w-16 h-16 rounded-full object-cover border border-slate-200 shadow-sm shrink-0"
             />
@@ -169,16 +169,18 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
                 {profile.role === 'worker' ? 'Helper / Worker' : `${profile.businessType || 'Household'} Employer`}
               </span>
               <div className="flex items-center gap-1.5 mt-1.5">
-                <RatingStars rating={profile.rating || 0} size={13} />
-                <span className="text-xs text-slate-400 font-semibold">({profile.ratingCount || 0} reviews)</span>
+                <RatingStars rating={profile.averageRating || profile.rating || 0} size={13} />
+                <span className="text-xs text-slate-400 font-semibold">({profile.totalReviews || profile.ratingCount || 0} reviews)</span>
               </div>
               <div className="mt-2.5 text-xs space-y-1.5 font-medium text-slate-600">
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-400 font-bold text-[10px] uppercase">Trust Score:</span>
                   <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                    (profile.trustScore || 0) >= 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                    (profile.trustScore || 0) >= 60 ? 'bg-green-50 text-green-700 border border-green-200' :
+                    (profile.trustScore || 0) >= 40 ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                    'bg-red-50 text-red-700 border border-red-200'
                   }`}>
-                    {profile.trustScore || 0}
+                    {profile.trustScore || 0}/100
                   </span>
                 </div>
                 {profile.role === 'employer' ? (
@@ -201,6 +203,31 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+              profile.phoneVerified || profile.phone
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-slate-50 text-slate-400 border-slate-200'
+            }`}>
+              {profile.phoneVerified || profile.phone ? '✅' : '❌'} Phone Verified
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+              profile.upiVerified
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-slate-50 text-slate-400 border-slate-200'
+            }`}>
+              {profile.upiVerified ? '✅' : '❌'} UPI Verified
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
+              profile.selfieVerified
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-slate-50 text-slate-400 border-slate-200'
+            }`}>
+              {profile.selfieVerified ? '✅' : '❌'} Selfie Verified
+            </span>
           </div>
 
           {/* User Description / About Me */}
@@ -387,6 +414,24 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
               </form>
             </div>
           )}
+
+          {/* Completed Job History Section */}
+          <div className="border-t border-slate-100 pt-4">
+            <h5 className="font-bold text-slate-800 text-xs uppercase tracking-wide mb-2">
+              Completed Job History
+            </h5>
+            {profile.completedJobHistory && profile.completedJobHistory.length > 0 ? (
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 bg-slate-50 border border-slate-200/45 rounded-lg">
+                {profile.completedJobHistory.map((history, idx) => (
+                  <span key={idx} className="bg-white text-slate-700 border border-slate-200 px-2 py-1 rounded text-xs font-semibold flex items-center gap-1">
+                    🔨 {history.title}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">No completed jobs yet.</p>
+            )}
+          </div>
 
           {/* Reviews List Section */}
           <div className="border-t border-slate-100 pt-4">

@@ -13,6 +13,7 @@ const AdminDashboard = () => {
   const [pendingReports, setPendingReports] = useState([]);
   const [queries, setQueries] = useState([]);
   const [pendingDisputes, setPendingDisputes] = useState([]);
+  const [flaggedUsers, setFlaggedUsers] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState('identity');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +39,9 @@ const AdminDashboard = () => {
 
       const userQueries = await queryService.getAllQueries();
       setQueries(userQueries);
+
+      const flagged = await authService.getFlaggedUsers();
+      setFlaggedUsers(flagged);
 
       const activeDisputes = await disputeService.getPendingDisputes();
       const enrichedDisputes = await Promise.all(activeDisputes.map(async (disp) => {
@@ -160,6 +164,57 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleVerifySelfie = async (uid, isApproved) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.verifySelfie(uid, isApproved);
+      setSuccess(`Selfie verification ${isApproved ? 'approved' : 'rejected'}!`);
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Selfie verification update failed.');
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyUpi = async (uid, isApproved) => {
+    setError('');
+    setSuccess('');
+    try {
+      setLoading(true);
+      await authService.verifyUpi(uid, isApproved);
+      setSuccess(`UPI verification ${isApproved ? 'approved' : 'rejected'}!`);
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('UPI verification update failed.');
+      setLoading(false);
+    }
+  };
+
+  const handleRunMigration = async () => {
+    setError('');
+    setSuccess('');
+    if (!window.confirm("Are you sure you want to run the trust score migration for all existing users in the database?")) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const migratedCount = await authService.runTrustMigration();
+      setSuccess(`Migration completed! Successfully recalculated trust scores for ${migratedCount} users.`);
+      await loadData();
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError('Migration failed: ' + (err.message || 'Unknown error'));
+      setLoading(false);
+    }
+  };
+
   const handlePhoneApprove = async (requestId) => {
     setError('');
     setSuccess('');
@@ -240,11 +295,21 @@ const AdminDashboard = () => {
         </button>
 
         {/* Header */}
-        <div className="border-b border-slate-200 pb-4 mb-6">
-          <h2 className="font-extrabold text-slate-800 text-xl flex items-center gap-2">
-            🛡️ Admin Control panel
-          </h2>
-          <p className="text-slate-500 text-xs mt-1">Audit profile credentials, verified badges, and sensitive phone updates.</p>
+        <div className="border-b border-slate-200 pb-4 mb-6 flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <h2 className="font-extrabold text-slate-800 text-xl flex items-center gap-2">
+              🛡️ Admin Control panel
+            </h2>
+            <p className="text-slate-500 text-xs mt-1">Audit profile credentials, verified badges, and sensitive phone updates.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRunMigration}
+            disabled={loading}
+            className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm transition-all cursor-pointer touch-target shrink-0"
+          >
+            🔄 Run Trust Migration
+          </button>
         </div>
 
         {/* Alerts */}
@@ -327,6 +392,17 @@ const AdminDashboard = () => {
           >
             🛡️ Disputes ({pendingDisputes.length})
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('flagged')}
+            className={`pb-3 text-sm font-bold border-b-2 transition-all ${
+              activeSubTab === 'flagged'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            🚩 Flagged Users ({flaggedUsers.length})
+          </button>
         </div>
 
         {/* Tab 1: Identity Verification Queue */}
@@ -363,7 +439,7 @@ const AdminDashboard = () => {
                           <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">UID: {user.uid}</span>
                         </div>
 
-                        <div className="text-xs text-slate-600 space-y-2 border-t border-slate-50 pt-3">
+                        <div className="text-xs text-slate-600 space-y-2 border-t border-slate-50 pt-3 text-left">
                           <div className="flex items-center gap-2">
                             <Phone size={14} className="text-slate-400" />
                             <span className="font-medium">{user.phone}</span>
@@ -374,37 +450,97 @@ const AdminDashboard = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <FileText size={14} className="text-slate-400" />
-                            <span>Aadhaar: <strong className="text-slate-700 font-mono tracking-wide">{user.aadhaarNumber}</strong></span>
+                            <span>UPI ID: <strong className="text-slate-700 font-mono tracking-wide">{user.upiId || 'Not Provided'}</strong></span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trust Score:</span>
+                            <strong className="text-slate-700">{user.trustScore ?? 0}/100</strong>
                           </div>
                         </div>
                       </div>
 
-                      {/* Middle Column: Uploaded Document Previews */}
-                      <div className="flex gap-4 border-t border-slate-100 pt-4 md:border-t-0 md:pt-0">
-                        <div className="flex flex-col gap-1 text-center">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Face Photo</span>
-                          {user.profilePhotoUrl ? (
-                            <a href={user.profilePhotoUrl} target="_blank" rel="noreferrer">
-                              <img src={user.profilePhotoUrl} alt="Face" className="w-16 h-16 rounded-lg object-cover border border-slate-200 shadow-sm" />
+                      {/* Middle Column: Selfie and UPI QR Previews with individual actions */}
+                      <div className="flex gap-6 border-t border-slate-100 pt-4 md:border-t-0 md:pt-0 items-start flex-wrap">
+                        {/* Selfie Section */}
+                        <div className="flex flex-col gap-2 text-center items-center">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Selfie Photo</span>
+                          {user.selfieUrl ? (
+                            <a href={user.selfieUrl} target="_blank" rel="noreferrer">
+                              <img src={user.selfieUrl} alt="Selfie" className="w-18 h-18 rounded-lg object-cover border border-slate-200 shadow-sm" />
                             </a>
                           ) : (
-                            <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
+                            <div className="w-18 h-18 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
                               <Image size={18} />
                             </div>
                           )}
+                          <div className="flex flex-col gap-1 mt-1">
+                            <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                              user.selfieVerified 
+                                ? 'bg-green-50 text-green-700 border-green-200' 
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {user.selfieVerified ? 'Selfie Verified' : 'Selfie Pending'}
+                            </span>
+                            <div className="flex gap-1 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleVerifySelfie(user.uid, false)}
+                                disabled={loading}
+                                className="bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded text-[10px] font-bold border border-red-100 cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVerifySelfie(user.uid, true)}
+                                disabled={loading}
+                                className="bg-green-50 hover:bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col gap-1 text-center flex-1 min-w-[120px]">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Aadhaar Card</span>
-                          {user.aadhaarPhotoUrl ? (
-                            <a href={user.aadhaarPhotoUrl} target="_blank" rel="noreferrer">
-                              <img src={user.aadhaarPhotoUrl} alt="Aadhaar" className="h-16 w-full max-w-[150px] rounded-lg object-cover border border-slate-200 shadow-sm" />
+                        {/* UPI QR Section */}
+                        <div className="flex flex-col gap-2 text-center items-center">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">UPI QR Code</span>
+                          {user.upiQrUrl ? (
+                            <a href={user.upiQrUrl} target="_blank" rel="noreferrer">
+                              <img src={user.upiQrUrl} alt="UPI QR" className="w-18 h-18 rounded-lg object-contain border border-slate-200 shadow-sm bg-white p-1" />
                             </a>
                           ) : (
-                            <div className="h-16 w-full bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200 rounded-lg">
+                            <div className="w-18 h-18 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
                               <Image size={18} />
                             </div>
                           )}
+                          <div className="flex flex-col gap-1 mt-1">
+                            <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
+                              user.upiVerified 
+                                ? 'bg-green-50 text-green-700 border-green-200' 
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {user.upiVerified ? 'UPI Verified' : 'UPI Pending'}
+                            </span>
+                            <div className="flex gap-1 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleVerifyUpi(user.uid, false)}
+                                disabled={loading}
+                                className="bg-red-50 hover:bg-red-100 text-red-650 px-2 py-1 rounded text-[10px] font-bold border border-red-100 cursor-pointer"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVerifyUpi(user.uid, true)}
+                                disabled={loading}
+                                className="bg-green-50 hover:bg-green-100 text-green-650 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
+                              >
+                                Approve
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -414,19 +550,19 @@ const AdminDashboard = () => {
                           type="button"
                           onClick={() => handleReject(user.uid)}
                           disabled={loading}
-                          className="flex-1 md:flex-none bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100 touch-target"
+                          className="flex-1 md:flex-none bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-200 touch-target cursor-pointer"
                         >
                           <XCircle size={15} />
-                          Reject
+                          Reject Profile
                         </button>
                         <button
                           type="button"
                           onClick={() => handleApprove(user.uid)}
                           disabled={loading}
-                          className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target"
+                          className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
                         >
                           <CheckCircle size={15} />
-                          Approve
+                          Approve Profile
                         </button>
                       </div>
                     </div>
@@ -695,7 +831,7 @@ const AdminDashboard = () => {
                         <h5 className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">Payment Details (Entered by Employer)</h5>
                         <div className="grid grid-cols-2 gap-2 leading-relaxed text-slate-600">
                           <div>Amount Transferred: <strong className="text-slate-800 font-bold">₹{disp.job?.paymentAmount || 'N/A'}</strong></div>
-                          <div>UPI Transaction ID: <strong className="text-slate-800 font-mono font-bold tracking-wider">{disp.job?.transactionReferenceId || 'N/A'}</strong></div>
+                          <div>Payment Type: <strong className="text-slate-800 font-bold">Direct UPI</strong></div>
                           <div className="col-span-2">Paid Timestamp: <span className="font-semibold">{disp.job?.paidAt ? new Date(disp.job.paidAt).toLocaleString('en-IN') : 'N/A'}</span></div>
                         </div>
                       </div>
@@ -816,6 +952,90 @@ const AdminDashboard = () => {
                         >
                           <CheckCircle size={15} />
                           Approve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 7: Flagged Users */}
+        {activeSubTab === 'flagged' && (
+          <div>
+            {loading && flaggedUsers.length === 0 ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="spinner"></div>
+              </div>
+            ) : flaggedUsers.length === 0 ? (
+              <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
+                <CheckCircle className="text-green-500" size={36} />
+                <p className="text-sm font-bold text-slate-700">No Flagged Users!</p>
+                <p className="text-xs text-slate-400">All users are in good standing.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
+                  Flagged Accounts ({flaggedUsers.length})
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {flaggedUsers.map((user) => (
+                    <div key={user.uid} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
+                      <div className="flex-1 space-y-2 text-left">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-extrabold text-slate-800 text-sm">
+                            {user.name}
+                          </h4>
+                          <span className="text-[10px] uppercase font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                            {user.role}
+                          </span>
+                          <span className="text-[10px] text-slate-400">UID: {user.uid}</span>
+                        </div>
+                        
+                        <p className="text-xs text-red-750 bg-red-50 border border-red-100 p-3 rounded-lg font-semibold">
+                          Reason: {user.flagReason || "No reason specified"}
+                        </p>
+                        
+                        <div className="text-[11px] text-slate-505 flex gap-4">
+                          <span>Phone: <strong>{user.phone || 'N/A'}</strong></span>
+                          <span>•</span>
+                          <span>Trust Score: <strong>{user.trustScore ?? 0}/100</strong></span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to unflag ${user.name}?`)) {
+                              try {
+                                setLoading(true);
+                                await authService.unflagUser(user.uid);
+                                setSuccess(`User ${user.name} has been unflagged.`);
+                                await loadData();
+                              } catch (err) {
+                                console.error(err);
+                                setError('Failed to unflag user.');
+                              } finally {
+                                setLoading(false);
+                              }
+                            }
+                          }}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs border border-slate-200 touch-target cursor-pointer"
+                        >
+                          Unflag User
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUser(user.uid)}
+                          disabled={loading}
+                          className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
+                        >
+                          Remove Account
                         </button>
                       </div>
                     </div>

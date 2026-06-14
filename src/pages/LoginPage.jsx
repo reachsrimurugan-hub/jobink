@@ -102,7 +102,7 @@ const LoginPage = () => {
       <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-sm p-6 sm:p-8 flex flex-col gap-6 text-center">
         {/* Brand Header */}
         <div>
-          <span className="font-extrabold text-2xl text-primary tracking-tight">WorkLink</span>
+          <span className="font-extrabold text-2xl text-primary tracking-tight">Jobink</span>
           <p className="text-slate-500 text-xs mt-1.5">{t('appTagline')}</p>
         </div>
 

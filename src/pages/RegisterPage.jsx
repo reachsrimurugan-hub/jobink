@@ -4,6 +4,45 @@ import { useAuth } from '../contexts/AuthContext';
 import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
 import { ShieldCheck, UserCheck, Briefcase, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { authService } from '../services/db';
+
+// Client-side image compression helper using HTML5 Canvas
+const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Compress to jpeg format with 0.7 quality
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      resolve(compressedBase64);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
 
 const RegisterPage = () => {
   const { currentUser, updateProfile } = useAuth();
@@ -18,14 +57,65 @@ const RegisterPage = () => {
   const [businessType, setBusinessType] = useState('Individual'); // For employers
   const [skills, setSkills] = useState([]); // For workers
   const availability = true; // For workers
-  const [aadhaarNumber, setAadhaarNumber] = useState('');
-  const [aadhaarPhoto, setAadhaarPhoto] = useState('');
+  
+  // Selfie and UPI Verification States
+  const [upiId, setUpiId] = useState('');
+  const [upiQr, setUpiQr] = useState('');
+  const [selfie, setSelfie] = useState('');
   const [profilePhoto, setProfilePhoto] = useState(currentUser?.profilePhotoUrl || '');
   const [onboardingPhone, setOnboardingPhone] = useState('');
+
+  // Phone OTP verification states for Google-registered users
+  const [phoneOtpRequested, setPhoneOtpRequested] = useState(false);
+  const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState(null);
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  // Handle phone verification Send OTP
+  const handleSendPhoneOtp = async () => {
+    setError('');
+    const sanitized = onboardingPhone.replace(/[^0-9]/g, '');
+    if (sanitized.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    const formattedPhone = `+91${sanitized}`;
+    try {
+      setLoading(true);
+      const result = await authService.signInWithPhone(formattedPhone, 'recaptcha-container');
+      setConfirmationResult(result);
+      setPhoneOtpRequested(true);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to send OTP. Please check your network and recaptcha.');
+      setLoading(false);
+    }
+  };
+
+  // Handle phone verification Confirm OTP
+  const handleVerifyPhoneOtp = async () => {
+    setError('');
+    if (phoneOtpCode.length !== 6) {
+      setError('Please enter the 6-digit OTP code.');
+      return;
+    }
+    try {
+      setLoading(true);
+      await confirmationResult.confirm(phoneOtpCode);
+      setPhoneVerified(true);
+      setPhoneOtpRequested(false);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Invalid OTP code. Please check and try again.');
+      setLoading(false);
+    }
+  };
 
   // Handle file base64 conversions
   const handleFileChange = (e, setFileState) => {
@@ -60,9 +150,15 @@ const RegisterPage = () => {
       setError('Please enter your full name.');
       return;
     }
-    if (!currentUser?.phone && onboardingPhone.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
+    if (!currentUser?.phone) {
+      if (onboardingPhone.length !== 10) {
+        setError('Please enter a valid 10-digit mobile number.');
+        return;
+      }
+      if (!phoneVerified) {
+        setError('Please verify your mobile number with OTP first.');
+        return;
+      }
     }
     if (!city || !area) {
       setError('Please select both city and area.');
@@ -80,13 +176,31 @@ const RegisterPage = () => {
     e.preventDefault();
     setError('');
 
-    if (aadhaarNumber.length !== 12 || !/^[0-9]+$/.test(aadhaarNumber)) {
-      setError('Aadhaar number must be exactly 12 digits.');
+    // UPI ID simple format check
+    const upiRegex = /^[\w.-]+@[\w.-]+$/;
+    if (!upiRegex.test(upiId.trim())) {
+      setError('Please enter a valid UPI ID (e.g. username@bank).');
+      return;
+    }
+
+    if (!selfie) {
+      setError('Selfie photo is required for profile verification.');
+      return;
+    }
+
+    if (!upiQr) {
+      setError('UPI QR code photo is required.');
       return;
     }
 
     try {
       setLoading(true);
+
+      // Compress images on the client side
+      const compressedSelfie = await compressImage(selfie, 800, 800);
+      const compressedUpiQr = await compressImage(upiQr, 800, 800);
+      const compressedProfile = profilePhoto ? await compressImage(profilePhoto, 400, 400) : '';
+
       const profileData = {
         name,
         role,
@@ -94,20 +208,29 @@ const RegisterPage = () => {
         location: `${city}, ${area}`,
         city,
         area,
-        verificationStatus: 'pending', // Set to pending for admin verification
+        verificationStatus: 'pending', // Trust verification status is pending
         verified: false,
-        aadhaarNumber,
-        aadhaarPhotoUrl: aadhaarPhoto || 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500', // Default placeholder
-        profilePhotoUrl: profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', // Default placeholder
-        language: i18n.language || 'en', // Save current language choice to profile
+        phoneVerified: currentUser.phone ? true : phoneVerified,
+        upiId: upiId.trim(),
+        upiQrUrl: compressedUpiQr,
+        upiVerified: false,
+        selfieUrl: compressedSelfie,
+        selfieVerified: false,
+        trustScore: 20, // Default trust score (20 for verified phone)
+        completedJobs: 0,
+        completedJobHistory: [],
+        isFlagged: false,
+        flagReason: '',
+        averageRating: 0,
+        totalReviews: 0,
+        profilePhotoUrl: compressedProfile || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        language: i18n.language || 'en',
         createdAt: new Date().toISOString()
       };
 
       if (role === 'worker') {
         profileData.skills = skills;
         profileData.availability = availability;
-        profileData.rating = 0;
-        profileData.ratingCount = 0;
       } else {
         profileData.businessType = businessType;
       }
@@ -209,23 +332,71 @@ const RegisterPage = () => {
 
             {/* Mobile Number (if logged in via Google and phone is empty) */}
             {!currentUser?.phone && (
-              <div>
-                <label htmlFor="regPhone" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="regPhone" className="block text-xs font-bold text-slate-700 mb-0.5 uppercase">
                   Mobile Number (for WhatsApp & Direct Contacts)
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
-                  <input
-                    id="regPhone"
-                    type="tel"
-                    placeholder="Enter 10-digit number"
-                    value={onboardingPhone}
-                    onChange={(e) => setOnboardingPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
-                    maxLength={10}
-                    className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
-                    required
-                  />
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
+                    <input
+                      id="regPhone"
+                      type="tel"
+                      placeholder="Enter 10-digit number"
+                      value={onboardingPhone}
+                      onChange={(e) => setOnboardingPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                      maxLength={10}
+                      className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
+                      required
+                      disabled={phoneVerified || phoneOtpRequested}
+                    />
+                  </div>
+                  {!phoneVerified && !phoneOtpRequested && (
+                    <button
+                      type="button"
+                      onClick={handleSendPhoneOtp}
+                      className="bg-primary hover:bg-primary-dark text-white font-bold px-4 rounded-xl text-xs touch-target cursor-pointer"
+                    >
+                      Send OTP
+                    </button>
+                  )}
+                  {phoneVerified && (
+                    <span className="text-green-600 font-semibold text-xs flex items-center justify-center border border-green-200 bg-green-50 px-4 rounded-xl">
+                      ✓ Verified
+                    </span>
+                  )}
                 </div>
+
+                <div id="recaptcha-container" className="my-1"></div>
+
+                {phoneOtpRequested && (
+                  <div className="flex flex-col gap-2 bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                    <label htmlFor="regPhoneOtp" className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Enter 6-digit OTP
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        id="regPhoneOtp"
+                        type="text"
+                        pattern="[0-9]*"
+                        inputMode="numeric"
+                        placeholder="123456"
+                        value={phoneOtpCode}
+                        onChange={(e) => setPhoneOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="flex-1 px-4 py-2 border border-slate-200 rounded-lg focus:border-primary text-center tracking-widest text-sm font-bold text-slate-800"
+                        maxLength={6}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyPhoneOtp}
+                        className="bg-primary hover:bg-primary-dark text-white font-bold px-4 rounded-lg text-xs"
+                      >
+                        Verify OTP
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -347,63 +518,102 @@ const RegisterPage = () => {
                 type="submit"
                 className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target cursor-pointer"
               >
-                {t('continueToIdentity')}
+                Continue to Identity
               </button>
             </div>
           </form>
         )}
 
-        {/* STEP 3: Identity upload (Aadhaar & Photo) */}
+        {/* STEP 3: Identity & Trust Verification */}
         {step === 3 && (
           <form onSubmit={handleStep3Submit} className="flex flex-col gap-5">
             <div className="bg-amber-50 text-amber-800 text-xs border border-amber-100 p-4 rounded-xl flex items-start gap-2.5 leading-normal">
               <ShieldCheck className="text-amber-600 shrink-0 mt-0.5" size={18} />
               <div>
-                {t('aadhaarVerifyRequired')}
+                Please submit the details below to complete your trust verification. These details are used to verify your profile and protect the marketplace.
               </div>
             </div>
 
-            {/* Aadhaar Number */}
-            <div>
-              <label htmlFor="aadhaar" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                {t('aadhaarNumberLabel')}
-              </label>
-              <input
-                id="aadhaar"
-                type="text"
-                placeholder="1234 5678 9012"
-                value={aadhaarNumber}
-                onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold tracking-wider text-slate-800 touch-target"
-                maxLength={12}
-                required
-                disabled={loading}
-              />
-            </div>
-
-            {/* Aadhaar Photo File */}
+            {/* Selfie Verification */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                {t('uploadAadhaarPhoto')}
+                Selfie Verification
               </label>
+              <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
+                Take a clear selfie of your face. Ensure your face is clearly visible without sunglasses or hats.
+              </p>
               <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleFileChange(e, setAadhaarPhoto)}
+                  capture="user"
+                  onChange={(e) => handleFileChange(e, setSelfie)}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  required={!aadhaarPhoto}
+                  required={!selfie}
+                  disabled={loading}
                 />
-                {aadhaarPhoto ? (
+                {selfie ? (
                   <div className="text-center w-full">
-                    <img src={aadhaarPhoto} alt="Aadhaar preview" className="max-h-24 mx-auto rounded border border-slate-200 mb-1" />
-                    <span className="text-[10px] text-green-600 font-semibold block">✓ Aadhaar Selected</span>
+                    <img src={selfie} alt="Selfie preview" className="w-20 h-20 rounded-full object-cover mx-auto border border-slate-200 mb-1" />
+                    <span className="text-[10px] text-green-600 font-semibold block">✓ Selfie Captured</span>
                   </div>
                 ) : (
                   <>
                     <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
-                    <span className="text-[10px] text-slate-400">{t('pngJpgFormats')}</span>
+                    <span className="text-xs font-semibold text-slate-600">Take Selfie / Upload Photo</span>
+                    <span className="text-[10px] text-slate-400">Camera starts automatically on mobile</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* UPI ID */}
+            <div>
+              <label htmlFor="upiIdInput" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                UPI ID (For Direct Payments)
+              </label>
+              <input
+                id="upiIdInput"
+                type="text"
+                placeholder="username@bank"
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
+                required
+                disabled={loading}
+              />
+              <p className="text-slate-400 text-[10px] mt-1">
+                E.g. user@okaxis, 9876543210@paytm. Verified helpers receive payments direct to this ID.
+              </p>
+            </div>
+
+            {/* UPI QR Code File */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                UPI QR Code Photo
+              </label>
+              <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
+                Upload a screenshot or photo of your UPI QR code from Google Pay, PhonePe, Paytm, etc.
+              </p>
+              <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleFileChange(e, setUpiQr)}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  required={!upiQr}
+                  disabled={loading}
+                />
+                {upiQr ? (
+                  <div className="text-center w-full">
+                    <img src={upiQr} alt="QR Code preview" className="max-h-24 mx-auto rounded border border-slate-200 mb-1" />
+                    <span className="text-[10px] text-green-600 font-semibold block">✓ QR Code Selected</span>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={20} className="text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-600">Select QR Code Image</span>
+                    <span className="text-[10px] text-slate-400">Screenshot or photo of Google Pay/PhonePe QR</span>
                   </>
                 )}
               </div>
@@ -412,7 +622,7 @@ const RegisterPage = () => {
             {/* Profile Photo File */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                {t('uploadProfilePhoto')}
+                Public Profile Photo
               </label>
               <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
                 <input
@@ -420,7 +630,7 @@ const RegisterPage = () => {
                   accept="image/*"
                   onChange={(e) => handleFileChange(e, setProfilePhoto)}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  required={!profilePhoto}
+                  disabled={loading}
                 />
                 {profilePhoto ? (
                   <div className="text-center w-full">
@@ -430,8 +640,8 @@ const RegisterPage = () => {
                 ) : (
                   <>
                     <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">{t('selectImageFile')}</span>
-                    <span className="text-[10px] text-slate-400">{t('faceClearlyVisible')}</span>
+                    <span className="text-xs font-semibold text-slate-600">Select public photo (Optional)</span>
+                    <span className="text-[10px] text-slate-400">A friendly photo for your profile card</span>
                   </>
                 )}
               </div>
@@ -452,7 +662,7 @@ const RegisterPage = () => {
                 disabled={loading}
                 className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 rounded-xl text-xs shadow-sm transition-all touch-target flex items-center justify-center cursor-pointer"
               >
-                {loading ? t('sending') : t('submitProfileForApproval')}
+                {loading ? 'Submitting...' : 'Submit Profile Verification'}
               </button>
             </div>
           </form>

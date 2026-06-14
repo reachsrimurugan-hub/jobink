@@ -153,7 +153,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                   <span className="xs:hidden">{t('pending')}</span>
                 </div>
               ) : currentUser.role && currentUser.role !== 'admin' ? (
-                <div className="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded border border-red-100" title="Needs Aadhaar Upload">
+                <div className="text-xs text-red-500 font-medium bg-red-50 px-2 py-1 rounded border border-red-100" title="Pending Trust Verification">
                   <span className="hidden xs:inline">{t('unverified')}</span>
                 </div>
               ) : null}

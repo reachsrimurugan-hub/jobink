@@ -4,6 +4,48 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
+// Centralized Trust Score Calculation
+const calculateTrustScore = (user) => {
+  let score = 0;
+  if (user.phoneVerified === true || !!user.phone) score += 20;
+  if (user.upiVerified === true) score += 20;
+  if (user.selfieUrl) score += 20; // Selfie uploaded
+  const completed = user.completedJobs || 0;
+  score += completed * 2;
+  const rating = user.rating || user.averageRating || 0;
+  if (rating >= 4.0) score += 20; // High Rating
+  return Math.min(score, 100);
+};
+
+// Check flagging rules in transaction
+const checkAndFlagUserInTransaction = (transaction, userRef, user) => {
+  let shouldFlag = false;
+  let reasons = [];
+
+  if ((user.disputesRaised || 0) >= 3) {
+    shouldFlag = true;
+    reasons.push(`Multiple disputes raised (${user.disputesRaised})`);
+  }
+  if ((user.disputesLost || 0) >= 2) {
+    shouldFlag = true;
+    reasons.push(`Repeated dispute losses (${user.disputesLost})`);
+  }
+
+  const ratingCount = user.ratingCount || user.totalReviews || 0;
+  const currentRating = user.rating || user.averageRating || 0;
+  if (ratingCount >= 3 && currentRating < 3.0) {
+    shouldFlag = true;
+    reasons.push(`Low rating: ${currentRating} stars (${ratingCount} reviews)`);
+  }
+
+  if (shouldFlag) {
+    transaction.update(userRef, {
+      isFlagged: true,
+      flagReason: reasons.join(", ")
+    });
+  }
+};
+
 // Helper to write an activity log inside a transaction or batch
 const addActivityLog = (jobId, action, actorId, details) => {
   const logRef = db.collection("jobs").doc(jobId).collection("activityLogs").doc();
@@ -141,9 +183,9 @@ exports.markJobAsPaid = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError("unauthenticated", "User must be authenticated.");
   }
-  const { jobId, paymentAmount, transactionReferenceId } = data;
-  if (!jobId || !paymentAmount || !transactionReferenceId) {
-    throw new functions.https.HttpsError("invalid-argument", "Missing required fields (jobId, paymentAmount, transactionReferenceId).");
+  const { jobId, paymentAmount } = data;
+  if (!jobId || !paymentAmount) {
+    throw new functions.https.HttpsError("invalid-argument", "Missing required fields (jobId, paymentAmount).");
   }
 
   const amountNum = Number(paymentAmount);
@@ -169,8 +211,8 @@ exports.markJobAsPaid = functions.https.onCall(async (data, context) => {
 
     transaction.update(jobRef, {
       status: "EMPLOYER_MARKED_PAID",
+      paymentStatus: "awaiting_worker_confirmation",
       paymentAmount: amountNum,
-      transactionReferenceId: transactionReferenceId.trim(),
       paidAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -180,7 +222,7 @@ exports.markJobAsPaid = functions.https.onCall(async (data, context) => {
       jobId, 
       "EMPLOYER_MARKED_PAID", 
       context.auth.uid, 
-      `Employer marked paid. Ref ID: ${transactionReferenceId}, Amount: ₹${amountNum}.`
+      `Employer marked paid. Amount: ₹${amountNum}. Awaiting worker confirmation.`
     );
     transaction.set(log.ref, log.data);
 
@@ -189,8 +231,8 @@ exports.markJobAsPaid = functions.https.onCall(async (data, context) => {
     if (targetWorker) {
       const notif = createNotification(
         targetWorker,
-        "Payment Processed",
-        `Employer marked payment for "${job.title}" as paid. Please verify details.`,
+        "Payment Sent",
+        `Employer indicated payment for "${job.title}" has been sent. Please confirm receipt.`,
         "payment_update"
       );
       transaction.set(notif.ref, notif.data);
@@ -228,35 +270,79 @@ exports.confirmPayment = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError("failed-precondition", "Job payment status has not been marked as paid by employer.");
     }
 
+    const historyItem = {
+      jobId,
+      title: job.title,
+      completedAt: new Date().toISOString()
+    };
+
     if (received) {
       // Payment Received Flow (COMPLETED)
       transaction.update(jobRef, {
         status: "COMPLETED",
+        paymentStatus: "confirmed",
         workerConfirmedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
 
-      // Update trust score & completed jobs
+      // Update completed jobs & completedJobHistory
       const employerRef = db.collection("users").doc(job.employerId);
       const workerRef = db.collection("users").doc(context.auth.uid);
 
       const empDoc = await transaction.get(employerRef);
       const wrkDoc = await transaction.get(workerRef);
 
+      let empData = {};
+      let wrkData = {};
+
       if (empDoc.exists) {
-        const empData = empDoc.data();
+        empData = empDoc.data();
+        const updatedCompleted = (empData.completedJobs || 0) + 1;
+        const updatedHistory = empData.completedJobHistory ? [...empData.completedJobHistory, historyItem] : [historyItem];
+        
+        // Recalculate trust score
+        const tempUser = { ...empData, completedJobs: updatedCompleted, completedJobHistory: updatedHistory };
+        const newScore = calculateTrustScore(tempUser);
+
         transaction.update(employerRef, {
-          trustScore: (empData.trustScore || 0) + 1,
-          completedJobs: (empData.completedJobs || 0) + 1
+          completedJobs: updatedCompleted,
+          completedJobHistory: admin.firestore.FieldValue.arrayUnion(historyItem),
+          trustScore: newScore
         });
+
+        // Notify about trust score update
+        const trustNotif = createNotification(
+          job.employerId,
+          "Trust Score Updated",
+          `Your Trust Score has been updated to ${newScore}/100.`,
+          "system"
+        );
+        transaction.set(trustNotif.ref, trustNotif.data);
       }
 
       if (wrkDoc.exists) {
-        const wrkData = wrkDoc.data();
+        wrkData = wrkDoc.data();
+        const updatedCompleted = (wrkData.completedJobs || 0) + 1;
+        const updatedHistory = wrkData.completedJobHistory ? [...wrkData.completedJobHistory, historyItem] : [historyItem];
+        
+        // Recalculate trust score
+        const tempUser = { ...wrkData, completedJobs: updatedCompleted, completedJobHistory: updatedHistory };
+        const newScore = calculateTrustScore(tempUser);
+
         transaction.update(workerRef, {
-          trustScore: (wrkData.trustScore || 0) + 1,
-          completedJobs: (wrkData.completedJobs || 0) + 1
+          completedJobs: updatedCompleted,
+          completedJobHistory: admin.firestore.FieldValue.arrayUnion(historyItem),
+          trustScore: newScore
         });
+
+        // Notify about trust score update
+        const trustNotif = createNotification(
+          context.auth.uid,
+          "Trust Score Updated",
+          `Your Trust Score has been updated to ${newScore}/100.`,
+          "system"
+        );
+        transaction.set(trustNotif.ref, trustNotif.data);
       }
 
       // Write activity log
@@ -281,6 +367,7 @@ exports.confirmPayment = functions.https.onCall(async (data, context) => {
 
       transaction.update(jobRef, {
         status: "DISPUTED",
+        paymentStatus: "disputed",
         updatedAt: new Date().toISOString()
       });
 
@@ -300,24 +387,28 @@ exports.confirmPayment = functions.https.onCall(async (data, context) => {
         createdAt: new Date().toISOString()
       });
 
-      // Increment worker disputes raised
+      // Increment disputes raised and check flagging rules
       const workerRef = db.collection("users").doc(context.auth.uid);
       const wrkDoc = await transaction.get(workerRef);
       if (wrkDoc.exists) {
         const wrkData = wrkDoc.data();
+        const updatedDisputes = (wrkData.disputesRaised || 0) + 1;
         transaction.update(workerRef, {
-          disputesRaised: (wrkData.disputesRaised || 0) + 1
+          disputesRaised: updatedDisputes
         });
+        checkAndFlagUserInTransaction(transaction, workerRef, { ...wrkData, disputesRaised: updatedDisputes });
       }
 
-      // Increment employer disputes count
+      // Increment employer disputes count and check flagging rules
       const employerRef = db.collection("users").doc(job.employerId);
       const empDoc = await transaction.get(employerRef);
       if (empDoc.exists) {
         const empData = empDoc.data();
+        const updatedDisputes = (empData.disputesRaised || 0) + 1;
         transaction.update(employerRef, {
-          disputesRaised: (empData.disputesRaised || 0) + 1
+          disputesRaised: updatedDisputes
         });
+        checkAndFlagUserInTransaction(transaction, employerRef, { ...empData, disputesRaised: updatedDisputes });
       }
 
       // Write activity log
@@ -553,3 +644,123 @@ exports.resolveDispute = functions.https.onCall(async (data, context) => {
     return { success: true };
   });
 });
+
+// 7. Scheduled Function to check pending payment confirmations (reminders at 48h, escalation at 96h)
+exports.checkPendingPaymentConfirmations = functions.pubsub.schedule("every 12 hours").onRun(async (context) => {
+  const now = new Date();
+  const fortyEightHoursMs = 48 * 60 * 60 * 1000;
+  const ninetySixHoursMs = 96 * 60 * 60 * 1000;
+
+  const jobsSnap = await db.collection("jobs")
+    .where("status", "==", "EMPLOYER_MARKED_PAID")
+    .where("paymentStatus", "==", "awaiting_worker_confirmation")
+    .get();
+
+  const batch = db.batch();
+  let updatesCount = 0;
+
+  for (const jobDoc of jobsSnap.docs) {
+    const job = jobDoc.data();
+    const jobId = jobDoc.id;
+    const paidAtStr = job.paidAt || job.updatedAt;
+    if (!paidAtStr) continue;
+
+    const paidAt = new Date(paidAtStr);
+    const elapsed = now.getTime() - paidAt.getTime();
+
+    if (elapsed >= ninetySixHoursMs) {
+      // Escalation to adminReviewRequired
+      if (!job.adminReviewRequired) {
+        batch.update(jobDoc.ref, {
+          adminReviewRequired: true,
+          updatedAt: now.toISOString()
+        });
+
+        // Write activity log
+        const logRef = db.collection("jobs").doc(jobId).collection("activityLogs").doc();
+        batch.set(logRef, {
+          action: "ESCALATED_TO_ADMIN",
+          actorId: "system",
+          details: "Payment confirmation overdue by 96 hours. Escalated to admin review.",
+          timestamp: now.toISOString()
+        });
+
+        // Notify Admin
+        const adminNotifRef = db.collection("notifications").doc();
+        batch.set(adminNotifRef, {
+          userId: "admin",
+          title: "Payment Confirmation Overdue",
+          message: `Job "${job.title}" payment confirmation is overdue by 96 hours. Admin review required.`,
+          type: "system",
+          read: false,
+          createdAt: now.toISOString()
+        });
+
+        // Notify Employer
+        const employerNotifRef = db.collection("notifications").doc();
+        batch.set(employerNotifRef, {
+          userId: job.employerId,
+          title: "Job Escalated to Admin",
+          message: `Your job "${job.title}" has been escalated to admin review because the worker has not confirmed payment in 96 hours.`,
+          type: "system",
+          read: false,
+          createdAt: now.toISOString()
+        });
+
+        // Notify Worker
+        const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
+        if (targetWorker) {
+          const workerNotifRef = db.collection("notifications").doc();
+          batch.set(workerNotifRef, {
+            userId: targetWorker,
+            title: "Payment Confirmation Overdue",
+            message: `Your payment confirmation for "${job.title}" is overdue by 96 hours. Escalated to admin review.`,
+            type: "system",
+            read: false,
+            createdAt: now.toISOString()
+          });
+        }
+        updatesCount++;
+      }
+    } else if (elapsed >= fortyEightHoursMs) {
+      // 48 hours reminder
+      if (!job.paymentReminderSent) {
+        batch.update(jobDoc.ref, {
+          paymentReminderSent: true,
+          updatedAt: now.toISOString()
+        });
+
+        // Write activity log
+        const logRef = db.collection("jobs").doc(jobId).collection("activityLogs").doc();
+        batch.set(logRef, {
+          action: "PAYMENT_REMINDER_SENT",
+          actorId: "system",
+          details: "48-hour reminder sent to worker.",
+          timestamp: now.toISOString()
+        });
+
+        // Notify Worker
+        const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
+        if (targetWorker) {
+          const workerNotifRef = db.collection("notifications").doc();
+          batch.set(workerNotifRef, {
+            userId: targetWorker,
+            title: "Action Required: Confirm Payment",
+            message: `Employer marked job "${job.title}" as paid 48 hours ago. Please confirm receipt or raise a dispute.`,
+            type: "payment_update",
+            read: false,
+            createdAt: now.toISOString()
+          });
+        }
+        updatesCount++;
+      }
+    }
+  }
+
+  if (updatesCount > 0) {
+    await batch.commit();
+  }
+  console.log(`Successfully checked pending payments. Sent ${updatesCount} updates/reminders.`);
+  return null;
+});
+
