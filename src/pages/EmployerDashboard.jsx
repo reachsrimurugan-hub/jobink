@@ -1435,7 +1435,7 @@ const EmployerDashboard = () => {
               {/* Reviews Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 mb-3">
-                  {t('workerFeedback')} ({reviews.length})
+                  Reviews ({reviews.length})
                 </h4>
 
                 {reviews.length === 0 ? (

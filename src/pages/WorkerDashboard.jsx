@@ -1388,44 +1388,7 @@ const WorkerDashboard = () => {
                   </div>
                 </div>
 
-                {/* Trust Score & Verification Status */}
-                <div className="w-full border-t border-slate-100 pt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 mx-auto sm:mx-0">
-                    <span className="text-slate-400 font-bold uppercase text-[10px]">Trust Score:</span>
-                    <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
-                      (currentUser.trustScore || 0) >= 60 ? 'bg-green-50 text-green-700 border border-green-200' :
-                      (currentUser.trustScore || 0) >= 40 ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                      'bg-red-50 text-red-700 border border-red-200'
-                    }`}>
-                      {currentUser.trustScore || 0}/100
-                    </span>
-                  </div>
 
-                  {/* Checklist Badges */}
-                  <div className="flex flex-wrap gap-2 justify-center sm:justify-end">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
-                      currentUser.phoneVerified || currentUser.phone
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : 'bg-slate-50 text-slate-400 border-slate-200'
-                    }`}>
-                      {currentUser.phoneVerified || currentUser.phone ? '✅' : '❌'} Phone Verified
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
-                      currentUser.upiVerified
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : 'bg-slate-50 text-slate-400 border-slate-200'
-                    }`}>
-                      {currentUser.upiVerified ? '✅' : '❌'} UPI Verified
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${
-                      currentUser.selfieVerified
-                        ? 'bg-green-50 text-green-700 border-green-200'
-                        : 'bg-slate-50 text-slate-400 border-slate-200'
-                    }`}>
-                      {currentUser.selfieVerified ? '✅' : '❌'} Selfie Verified
-                    </span>
-                  </div>
-                </div>
               </div>
 
               {/* Skills */}
@@ -1445,7 +1408,7 @@ const WorkerDashboard = () => {
               {/* Reviews Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 mb-3">
-                  {t('employerFeedback')} ({reviews.length})
+                  Reviews ({reviews.length})
                 </h4>
 
                 {reviews.length === 0 ? (
