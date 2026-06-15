@@ -34,8 +34,8 @@ const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Compress to jpeg format with 0.7 quality
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      // Compress to webp format with 0.6 quality
+      const compressedBase64 = canvas.toDataURL('image/webp', 0.6);
       resolve(compressedBase64);
     };
     img.onerror = () => {
@@ -57,10 +57,9 @@ const RegisterPage = () => {
   const [businessType, setBusinessType] = useState('Individual'); // For employers
   const [skills, setSkills] = useState([]); // For workers
   const availability = true; // For workers
-  
+
   // Selfie and UPI Verification States
   const [upiId, setUpiId] = useState('');
-  const [upiQr, setUpiQr] = useState('');
   const [selfie, setSelfie] = useState('');
   const [profilePhoto, setProfilePhoto] = useState(currentUser?.profilePhotoUrl || '');
   const [onboardingPhone, setOnboardingPhone] = useState('');
@@ -188,17 +187,11 @@ const RegisterPage = () => {
       return;
     }
 
-    if (!upiQr) {
-      setError('UPI QR code photo is required.');
-      return;
-    }
-
     try {
       setLoading(true);
 
       // Compress images on the client side
       const compressedSelfie = await compressImage(selfie, 800, 800);
-      const compressedUpiQr = await compressImage(upiQr, 800, 800);
       const compressedProfile = profilePhoto ? await compressImage(profilePhoto, 400, 400) : '';
 
       const profileData = {
@@ -212,7 +205,7 @@ const RegisterPage = () => {
         verified: false,
         phoneVerified: currentUser.phone ? true : phoneVerified,
         upiId: upiId.trim(),
-        upiQrUrl: compressedUpiQr,
+        upiQrUrl: '',
         upiVerified: false,
         selfieUrl: compressedSelfie,
         selfieVerified: false,
@@ -611,38 +604,6 @@ const RegisterPage = () => {
               <p className="text-slate-400 text-[10px] mt-1">
                 E.g. user@okaxis, 9876543210@paytm. Verified helpers receive payments direct to this ID.
               </p>
-            </div>
-
-            {/* UPI QR Code File */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                UPI QR Code Photo
-              </label>
-              <p className="text-slate-500 text-[11px] mb-2 leading-relaxed">
-                Upload a screenshot or photo of your UPI QR code from Google Pay, PhonePe, Paytm, etc.
-              </p>
-              <div className="relative border-2 border-dashed border-slate-200 hover:border-primary rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 hover:bg-white transition-all">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e, setUpiQr)}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  required={!upiQr}
-                  disabled={loading}
-                />
-                {upiQr ? (
-                  <div className="text-center w-full">
-                    <img src={upiQr} alt="QR Code preview" className="max-h-24 mx-auto rounded border border-slate-200 mb-1" />
-                    <span className="text-[10px] text-green-600 font-semibold block">✓ QR Code Selected</span>
-                  </div>
-                ) : (
-                  <>
-                    <Upload size={20} className="text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-600">Select QR Code Image</span>
-                    <span className="text-[10px] text-slate-400">Screenshot or photo of Google Pay/PhonePe QR</span>
-                  </>
-                )}
-              </div>
             </div>
 
             {/* Profile Photo File */}

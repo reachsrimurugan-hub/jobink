@@ -343,8 +343,12 @@ const ProfileViewModal = ({ isOpen, onClose, targetUserId, currentUserId, curren
                   <span className="text-xs text-slate-500 font-bold uppercase">Rating:</span>
                   <RatingStars rating={rating} size={20} interactive={true} onChange={(v) => setRating(v)} />
                 </div>
-                <div>
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="reviewCommentText" className="text-xs text-slate-550 font-bold uppercase block">
+                    Review Comment
+                  </label>
                   <textarea
+                    id="reviewCommentText"
                     rows={2}
                     placeholder="Describe your experience working together..."
                     value={comment}

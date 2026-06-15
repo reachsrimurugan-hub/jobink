@@ -71,7 +71,7 @@ async function runMigration() {
       let verificationStatus = user.verificationStatus || 'unverified';
       if (verified) {
         verificationStatus = 'verified';
-      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiQrUrl) || (!isSelfieVerified && user.selfieUrl)) {
+      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
         if (user.verificationStatus !== 'rejected') {
           verificationStatus = 'pending';
         }

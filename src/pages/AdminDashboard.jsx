@@ -614,19 +614,10 @@ const AdminDashboard = () => {
                             </div>
                           </div>
                         </div>
-                        
-                        {/* UPI QR Section */}
-                        <div className="flex flex-col gap-2 text-center items-center">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">UPI QR Code</span>
-                          {user.upiQrUrl ? (
-                            <a href={user.upiQrUrl} target="_blank" rel="noreferrer">
-                              <img src={user.upiQrUrl} alt="UPI QR" className="w-18 h-18 rounded-lg object-contain border border-slate-200 shadow-sm bg-white p-1" />
-                            </a>
-                          ) : (
-                            <div className="w-18 h-18 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
-                              <Image size={18} />
-                            </div>
-                          )}
+
+                        {/* UPI Verification Section */}
+                        <div className="flex flex-col gap-2 text-center items-center justify-between h-full">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">UPI Credentials</span>
                           <div className="flex flex-col gap-1 mt-1">
                             <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
                               user.upiVerified 
@@ -640,7 +631,7 @@ const AdminDashboard = () => {
                                 type="button"
                                 onClick={() => handleVerifyUpi(user.uid, false)}
                                 disabled={loading}
-                                className="bg-red-50 hover:bg-red-100 text-red-650 px-2 py-1 rounded text-[10px] font-bold border border-red-100 cursor-pointer"
+                                className="bg-red-50 hover:bg-red-100 text-red-655 px-2 py-1 rounded text-[10px] font-bold border border-red-100 cursor-pointer"
                               >
                                 Reject
                               </button>
@@ -648,7 +639,7 @@ const AdminDashboard = () => {
                                 type="button"
                                 onClick={() => handleVerifyUpi(user.uid, true)}
                                 disabled={loading}
-                                className="bg-green-50 hover:bg-green-100 text-green-650 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
+                                className="bg-green-50 hover:bg-green-100 text-green-655 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
                               >
                                 Approve
                               </button>
@@ -1102,17 +1093,11 @@ const AdminDashboard = () => {
                           <div>
                             <span className="text-slate-400 font-bold block uppercase text-[9px] mb-0.5">Current UPI ID</span>
                             <span className="font-mono font-bold text-slate-700">{req.oldUpiId || 'N/A'}</span>
-                            {req.oldUpiQr && (
-                              <img src={req.oldUpiQr} alt="Old QR" className="w-12 h-12 object-contain mt-1 border border-slate-100 p-0.5 bg-white" />
-                            )}
                           </div>
                           <div className="text-slate-355 font-light text-lg">→</div>
                           <div>
                             <span className="text-primary font-bold block uppercase text-[9px] mb-0.5">Requested New UPI ID</span>
                             <span className="font-mono font-bold text-primary">{req.newUpiId}</span>
-                            {req.newUpiQr && (
-                              <img src={req.newUpiQr} alt="New QR" className="w-12 h-12 object-contain mt-1 border border-slate-205 p-0.5 bg-white" />
-                            )}
                           </div>
                           <div className="ml-auto text-[10px] text-slate-400 self-end">
                             Requested: {new Date(req.createdAt).toLocaleDateString('en-IN')}

@@ -61,6 +61,7 @@ const NotificationCard = ({ notification, onMarkRead }) => {
           onClick={() => onMarkRead(id)}
           className="text-primary hover:text-primary-dark p-1.5 hover:bg-white rounded-lg border border-slate-200/60 shadow-sm transition-all shrink-0 touch-target flex items-center justify-center"
           title="Mark read"
+          aria-label="Mark read"
         >
           <Check size={14} className="stroke-[3]" />
         </button>
@@ -69,4 +70,4 @@ const NotificationCard = ({ notification, onMarkRead }) => {
   );
 };
 
-export default NotificationCard;
+export default React.memo(NotificationCard);

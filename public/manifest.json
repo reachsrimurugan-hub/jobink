@@ -1,0 +1,16 @@
+{
+  "short_name": "Jobink",
+  "name": "Jobink - Hyperlocal Part-Time Jobs",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563EB",
+  "background_color": "#F8FAFC",
+  "orientation": "portrait-primary"
+}

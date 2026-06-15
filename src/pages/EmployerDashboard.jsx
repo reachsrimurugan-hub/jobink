@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService, disputeService } from '../services/db';
@@ -8,11 +8,10 @@ import JobCard from '../components/JobCard';
 import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
-import ProfileViewModal from '../components/ProfileViewModal';
+const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
 import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, CheckCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.webp';
-
 // Client-side image compression helper using HTML5 Canvas
 const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
   return new Promise((resolve) => {
@@ -41,8 +40,8 @@ const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Compress to jpeg format with 0.7 quality
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      // Compress to webp format with 0.6 quality
+      const compressedBase64 = canvas.toDataURL('image/webp', 0.6);
       resolve(compressedBase64);
     };
     img.onerror = () => {
@@ -129,7 +128,6 @@ const EmployerDashboard = () => {
   // UPI Change States
   const [upiRequest, setUpiRequest] = useState(null);
   const [newUpiId, setNewUpiId] = useState('');
-  const [newUpiQr, setNewUpiQr] = useState('');
   const [upiLoading, setUpiLoading] = useState(false);
   const [upiError, setUpiError] = useState('');
   const [upiSuccess, setUpiSuccess] = useState('');
@@ -141,7 +139,6 @@ const EmployerDashboard = () => {
 
   // Re-verification states
   const [reUpiId, setReUpiId] = useState('');
-  const [reUpiQr, setReUpiQr] = useState('');
   const [reSelfie, setReSelfie] = useState('');
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
@@ -324,24 +321,17 @@ const EmployerDashboard = () => {
       return;
     }
 
-    if (!newUpiQr) {
-      setUpiError('UPI QR Code image is required.');
-      return;
-    }
-
     setUpiLoading(true);
     try {
-      const compressedQr = await compressImage(newUpiQr, 800, 800);
       await authService.requestUpiChange(
         currentUser.uid,
         currentUser.upiId || '',
         newUpiId.trim(),
-        currentUser.upiQrUrl || '',
-        compressedQr,
+        '',
+        '',
         currentUser.name || 'User'
       );
       setUpiSuccess('UPI change request submitted successfully to Admin.');
-      setNewUpiQr('');
       await loadRequests();
       setUpiLoading(false);
     } catch (err) {
@@ -359,7 +349,6 @@ const EmployerDashboard = () => {
       setUpiSuccess('');
       setUpiError('');
       setNewUpiId(currentUser.upiId || '');
-      setNewUpiQr('');
       setUpiLoading(false);
     } catch (err) {
       console.error(err);
@@ -385,20 +374,14 @@ const EmployerDashboard = () => {
       return;
     }
 
-    if (!reUpiQr) {
-      setReVerifError('UPI QR code photo is required.');
-      return;
-    }
-
     setReVerifLoading(true);
     try {
       // Compress images
       const compressedSelfie = await compressImage(reSelfie, 800, 800);
-      const compressedUpiQr = await compressImage(reUpiQr, 800, 800);
 
       await authService.saveUserProfile(currentUser.uid, {
         upiId: reUpiId.trim(),
-        upiQrUrl: compressedUpiQr,
+        upiQrUrl: '',
         upiVerified: false,
         selfieUrl: compressedSelfie,
         selfieVerified: false,
@@ -407,7 +390,6 @@ const EmployerDashboard = () => {
       });
       setReVerifSuccess('Trust verification details re-submitted successfully!');
       setReUpiId('');
-      setReUpiQr('');
       setReSelfie('');
       await reloadProfile();
       setReVerifLoading(false);
@@ -1352,41 +1334,13 @@ const EmployerDashboard = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          Upload UPI QR Code Photo
-                        </label>
-                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileChange(e, setReUpiQr)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            required={!reUpiQr}
-                          />
-                          {reUpiQr ? (
-                            <div className="text-center w-full">
-                              <img src={reUpiQr} alt="Re-UPI QR preview" className="max-h-12 mx-auto rounded border border-slate-200" />
-                              <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Uploaded</span>
-                            </div>
-                          ) : (
-                            <>
-                              <Upload size={14} className="text-slate-400" />
-                              <span className="text-xs font-semibold text-slate-550">Select QR Code</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={reVerifLoading}
-                        className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-auto"
-                      >
-                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      disabled={reVerifLoading}
+                      className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer mt-2"
+                    >
+                      {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
+                    </button>
                   </form>
                 </div>
               )}
@@ -1687,14 +1641,18 @@ const EmployerDashboard = () => {
         </form>
       </Modal>
 
-      <ProfileViewModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        targetUserId={selectedWorkerId}
-        currentUserId={currentUser.uid}
-        currentUserName={currentUser.name}
-        canWriteReview={canReviewWorker}
-      />
+      {isProfileOpen && (
+        <Suspense fallback={null}>
+          <ProfileViewModal
+            isOpen={isProfileOpen}
+            onClose={() => setIsProfileOpen(false)}
+            targetUserId={selectedWorkerId}
+            currentUserId={currentUser.uid}
+            currentUserName={currentUser.name}
+            canWriteReview={canReviewWorker}
+          />
+        </Suspense>
+      )}
 
       <Modal
         isOpen={isEditProfileOpen}
@@ -1897,31 +1855,7 @@ const EmployerDashboard = () => {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                      New UPI QR Code Photo
-                    </label>
-                    <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all h-20">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileChange(e, setNewUpiQr)}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        required
-                      />
-                      {newUpiQr ? (
-                        <div className="text-center w-full">
-                          <img src={newUpiQr} alt="New QR Preview" className="w-10 h-10 object-contain mx-auto border border-slate-200 p-0.5 bg-white" />
-                          <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Selected</span>
-                        </div>
-                      ) : (
-                        <>
-                          <Upload size={14} className="text-slate-400" />
-                          <span className="text-xs font-semibold text-slate-550">Upload UPI QR Image</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+
                   <button
                     type="submit"
                     disabled={upiLoading}
@@ -1947,10 +1881,7 @@ const EmployerDashboard = () => {
 
                   <div className="text-xs text-slate-655 space-y-2">
                     <div>Requested UPI ID: <strong className="text-slate-800 font-mono">{upiRequest.newUpiId}</strong></div>
-                    <div className="flex gap-2 items-center">
-                      <span className="text-[9px] text-slate-400 font-bold uppercase">Requested QR Code:</span>
-                      <img src={upiRequest.newUpiQr} alt="New QR Preview" className="w-12 h-12 object-contain border border-slate-200 p-0.5 bg-white" />
-                    </div>
+
                   </div>
 
                   {upiRequest.status === 'pending' && (
@@ -2178,22 +2109,7 @@ const EmployerDashboard = () => {
                     )}
                   </div>
                 </div>
-                {payWorkerProfile.upiQrUrl && (
-                  <div>
-                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Scan QR Code</span>
-                    <div className="w-18 h-18 border border-slate-200 rounded-lg overflow-hidden bg-white shadow-sm flex items-center justify-center p-1">
-                      <img 
-                        src={payWorkerProfile.upiQrUrl} 
-                        alt="Worker UPI QR" 
-                        className="max-w-full max-h-full object-contain cursor-zoom-in"
-                        onClick={() => {
-                          const newTab = window.open();
-                          newTab.document.write(`<img src="${payWorkerProfile.upiQrUrl}" style="max-width:100%; max-height:100vh; display:block; margin:auto;" />`);
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+
               </div>
             </div>
           ) : (

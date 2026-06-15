@@ -38,6 +38,7 @@ const BottomNav = ({ role, activeTab, setActiveTab, unreadCount = 0 }) => {
               }, 450);
             }}
             className="flex flex-col items-center justify-center flex-1 py-1 px-2 relative transition-colors"
+            aria-label={tab.label}
           >
             <div className="relative flex items-center justify-center text-slate-400">
               <IconComponent 

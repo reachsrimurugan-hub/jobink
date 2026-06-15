@@ -27,10 +27,20 @@ import { db, auth, functions, googleProvider } from '../firebase/config';
 
 // Profile In-Memory Cache to prevent redundant getDoc queries
 const profileCache = new Map();
+const jobsCache = new Map();
+const appsCache = new Map();
+const reviewsCache = new Map();
+
+export const clearJobsCache = () => jobsCache.clear();
+export const clearAppsCache = () => appsCache.clear();
+export const clearReviewsCache = () => reviewsCache.clear();
 
 // Helper to clear profile cache on logout
 export const clearProfileCache = () => {
   profileCache.clear();
+  jobsCache.clear();
+  appsCache.clear();
+  reviewsCache.clear();
 };
 
 // Centralized Trust Score Calculation
@@ -62,7 +72,7 @@ export const recalculateUserTrustAndVerification = async (uid) => {
   let verificationStatus = user.verificationStatus || 'unverified';
   if (verified) {
     verificationStatus = 'verified';
-  } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiQrUrl) || (!isSelfieVerified && user.selfieUrl)) {
+  } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
     if (user.verificationStatus !== 'rejected') {
       verificationStatus = 'pending';
     }
@@ -380,7 +390,7 @@ export const authService = {
       uid,
       isApproved ? "UPI Verification Approved!" : "UPI Verification Failed",
       isApproved 
-        ? "Your UPI credentials and QR code have been approved. Trust Score updated."
+        ? "Your UPI credentials have been approved. Trust Score updated."
         : `Your UPI verification was rejected by the admin. Reason: ${rejectionReason}`
     );
 
@@ -433,7 +443,7 @@ export const authService = {
       let verificationStatus = user.verificationStatus || 'unverified';
       if (verified) {
         verificationStatus = 'verified';
-      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiQrUrl) || (!isSelfieVerified && user.selfieUrl)) {
+      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
         if (user.verificationStatus !== 'rejected') {
           verificationStatus = 'pending';
         }
@@ -761,6 +771,7 @@ export const authService = {
 export const jobService = {
   // Post a new job
   createJob: async (jobData) => {
+    clearJobsCache();
     // Enforce limits and protections
     const employerRef = doc(db, 'users', jobData.employerId);
     const employerSnap = await getDoc(employerRef);
@@ -814,6 +825,12 @@ export const jobService = {
 
   // Fetch all open jobs in a location
   getJobs: async (cityFilter, areaFilter, queryLimit = 30) => {
+    const cacheKey = `${cityFilter || ''}_${areaFilter || ''}_${queryLimit}`;
+    const cached = jobsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 15000) {
+      return cached.data;
+    }
+
     let q = query(
       collection(db, 'jobs'), 
       where('status', '==', 'open'),
@@ -829,7 +846,9 @@ export const jobService = {
     
     const querySnapshot = await getDocs(q);
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const sorted = data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    jobsCache.set(cacheKey, { data: sorted, timestamp: Date.now() });
+    return sorted;
   },
 
   // Get job details
@@ -852,6 +871,7 @@ export const jobService = {
 
   // Mark job as completed / booked
   updateJobStatus: async (jobId, status) => {
+    clearJobsCache();
     const jobRef = doc(db, 'jobs', jobId);
     await updateDoc(jobRef, { status });
     
@@ -1234,6 +1254,8 @@ export const jobService = {
 export const applicationService = {
   // Apply for a job
   applyForJob: async (jobId, worker) => {
+    clearJobsCache();
+    clearAppsCache();
     const payload = {
       jobId,
       workerId: worker.uid,
@@ -1275,6 +1297,11 @@ export const applicationService = {
 
   // Get applications submitted by a worker
   getWorkerApplications: async (workerId) => {
+    const cached = appsCache.get(workerId);
+    if (cached && Date.now() - cached.timestamp < 15000) {
+      return cached.data;
+    }
+
     const q = query(
       collection(db, 'applications'),
       where('workerId', '==', workerId)
@@ -1302,11 +1329,14 @@ export const applicationService = {
         };
       })
     );
+    appsCache.set(workerId, { data: appsWithJobs, timestamp: Date.now() });
     return appsWithJobs;
   },
 
   // Approve / select / reject application status
   updateApplicationStatus: async (jobId, workerId, status) => {
+    clearJobsCache();
+    clearAppsCache();
     const appId = `${jobId}_${workerId}`;
     await updateDoc(doc(db, 'applications', appId), { status });
     
@@ -1417,6 +1447,7 @@ export const notificationService = {
 // --- REVIEW SERVICE ---
 export const reviewService = {
   submitReview: async (reviewerId, reviewerName, receiverId, jobId, jobTitle, rating, comment) => {
+    clearReviewsCache();
     const payload = {
       reviewerId,
       reviewerName,
@@ -1458,13 +1489,20 @@ export const reviewService = {
 
     // Fetch reviews received by a user
   getUserReviews: async (userId) => {
+    const cached = reviewsCache.get(userId);
+    if (cached && Date.now() - cached.timestamp < 15000) {
+      return cached.data;
+    }
+
     const q = query(
       collection(db, 'reviews'),
       where('receiverId', '==', userId)
     );
     const querySnapshot = await getDocs(q);
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const sorted = data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    reviewsCache.set(userId, { data: sorted, timestamp: Date.now() });
+    return sorted;
   }
 };
 

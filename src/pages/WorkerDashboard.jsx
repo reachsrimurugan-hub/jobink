@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
@@ -8,7 +8,7 @@ import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
 import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
-import ProfileViewModal from '../components/ProfileViewModal';
+const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
 import Modal from '../components/Modal';
 import { MapPin, Briefcase, Bell, User, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload, Camera, XCircle, CheckCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -41,8 +41,8 @@ const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Compress to jpeg format with 0.7 quality
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      // Compress to webp format with 0.6 quality
+      const compressedBase64 = canvas.toDataURL('image/webp', 0.6);
       resolve(compressedBase64);
     };
     img.onerror = () => {
@@ -125,7 +125,6 @@ const WorkerDashboard = () => {
   // UPI Change States
   const [upiRequest, setUpiRequest] = useState(null);
   const [newUpiId, setNewUpiId] = useState('');
-  const [newUpiQr, setNewUpiQr] = useState('');
   const [upiLoading, setUpiLoading] = useState(false);
   const [upiError, setUpiError] = useState('');
   const [upiSuccess, setUpiSuccess] = useState('');
@@ -139,7 +138,6 @@ const WorkerDashboard = () => {
 
   // Re-verification states
   const [reUpiId, setReUpiId] = useState('');
-  const [reUpiQr, setReUpiQr] = useState('');
   const [reSelfie, setReSelfie] = useState('');
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
@@ -291,24 +289,17 @@ const WorkerDashboard = () => {
       return;
     }
 
-    if (!newUpiQr) {
-      setUpiError('UPI QR Code image is required.');
-      return;
-    }
-
     setUpiLoading(true);
     try {
-      const compressedQr = await compressImage(newUpiQr, 800, 800);
       await authService.requestUpiChange(
         currentUser.uid,
         currentUser.upiId || '',
         newUpiId.trim(),
-        currentUser.upiQrUrl || '',
-        compressedQr,
+        '',
+        '',
         currentUser.name || 'User'
       );
       setUpiSuccess('UPI change request submitted successfully to Admin.');
-      setNewUpiQr('');
       await loadRequests();
       setUpiLoading(false);
     } catch (err) {
@@ -326,7 +317,6 @@ const WorkerDashboard = () => {
       setUpiSuccess('');
       setUpiError('');
       setNewUpiId(currentUser.upiId || '');
-      setNewUpiQr('');
       setUpiLoading(false);
     } catch (err) {
       console.error(err);
@@ -352,20 +342,14 @@ const WorkerDashboard = () => {
       return;
     }
 
-    if (!reUpiQr) {
-      setReVerifError('UPI QR code photo is required.');
-      return;
-    }
-
     setReVerifLoading(true);
     try {
       // Compress images
       const compressedSelfie = await compressImage(reSelfie, 800, 800);
-      const compressedUpiQr = await compressImage(reUpiQr, 800, 800);
 
       await authService.saveUserProfile(currentUser.uid, {
         upiId: reUpiId.trim(),
-        upiQrUrl: compressedUpiQr,
+        upiQrUrl: '',
         upiVerified: false,
         selfieUrl: compressedSelfie,
         selfieVerified: false,
@@ -479,18 +463,32 @@ const WorkerDashboard = () => {
   // Unread notifications count
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const [jobsLimit, setJobsLimit] = useState(20);
+  const observer = useRef();
+
+  const lastJobElementRef = useCallback((node) => {
+    if (loading) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && jobs.length >= jobsLimit) {
+        setJobsLimit(prev => prev + 20);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, jobs.length, jobsLimit]);
+
   // Load jobs based on filters
   const loadJobs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await jobService.getJobs(filterCity, filterArea);
+      const data = await jobService.getJobs(filterCity, filterArea, jobsLimit);
       setJobs(data);
       setLoading(false);
     } catch (err) {
       console.error(err);
       setLoading(false);
     }
-  }, [filterCity, filterArea]);
+  }, [filterCity, filterArea, jobsLimit]);
 
   const loadApplications = useCallback(async () => {
     try {
@@ -882,6 +880,19 @@ const WorkerDashboard = () => {
                       })}
                     </div>
                   )}
+
+                  {filteredAndSortedJobs.length > 0 && jobs.length >= jobsLimit && (
+                    <div className="mt-6 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setJobsLimit(prev => prev + 20)}
+                        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-6 rounded-xl text-xs shadow-sm transition-all cursor-pointer touch-target inline-flex items-center gap-1.5"
+                      >
+                        Load More Jobs
+                      </button>
+                    </div>
+                  )}
+                  <div ref={lastJobElementRef} className="h-2"></div>
                 </div>
               </div>
 
@@ -963,6 +974,7 @@ const WorkerDashboard = () => {
                         appStatusFilter !== 'all' ? 'border-primary text-primary bg-primary/5' : 'border-slate-200 text-slate-700 bg-white'
                       } rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer flex items-center justify-center`}
                       title="Filter by Status"
+                      aria-label="Filter by Status"
                     >
                       <Filter size={16} />
                     </button>
@@ -1305,41 +1317,13 @@ const WorkerDashboard = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          Upload UPI QR Code Photo
-                        </label>
-                        <div className="relative border border-dashed border-slate-300 hover:border-red-500 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-white hover:bg-slate-50 transition-all h-24">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleFileChange(e, setReUpiQr)}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                            required={!reUpiQr}
-                          />
-                          {reUpiQr ? (
-                            <div className="text-center w-full">
-                              <img src={reUpiQr} alt="Re-UPI QR preview" className="max-h-12 mx-auto rounded border border-slate-200" />
-                              <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Uploaded</span>
-                            </div>
-                          ) : (
-                            <>
-                              <Upload size={14} className="text-slate-400" />
-                              <span className="text-xs font-semibold text-slate-550">Select QR Code</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={reVerifLoading}
-                        className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-auto"
-                      >
-                        {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
-                      </button>
-                    </div>
+                    <button
+                      type="submit"
+                      disabled={reVerifLoading}
+                      className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer mt-4"
+                    >
+                      {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
+                    </button>
                   </form>
                 </div>
               )}
@@ -1485,14 +1469,18 @@ const WorkerDashboard = () => {
         unreadCount={unreadCount} 
       />
 
-      <ProfileViewModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        targetUserId={selectedEmployerId}
-        currentUserId={currentUser.uid}
-        currentUserName={currentUser.name}
-        canWriteReview={canReviewEmployer}
-      />
+      {isProfileModalOpen && (
+        <Suspense fallback={null}>
+          <ProfileViewModal
+            isOpen={isProfileModalOpen}
+            onClose={() => setIsProfileModalOpen(false)}
+            targetUserId={selectedEmployerId}
+            currentUserId={currentUser.uid}
+            currentUserName={currentUser.name}
+            canWriteReview={canReviewEmployer}
+          />
+        </Suspense>
+      )}
 
       <Modal
         isOpen={isEditProfileOpen}
@@ -1696,31 +1684,6 @@ const WorkerDashboard = () => {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                      New UPI QR Code Photo
-                    </label>
-                    <div className="relative border border-dashed border-slate-300 hover:border-primary rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50 hover:bg-white transition-all h-20">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleFileChange(e, setNewUpiQr)}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                        required
-                      />
-                      {newUpiQr ? (
-                        <div className="text-center w-full">
-                          <img src={newUpiQr} alt="New QR Preview" className="w-10 h-10 object-contain mx-auto border border-slate-200 p-0.5 bg-white" />
-                          <span className="text-[9px] text-green-600 font-semibold block mt-0.5">✓ QR Code Selected</span>
-                        </div>
-                      ) : (
-                        <>
-                          <Upload size={14} className="text-slate-400" />
-                          <span className="text-xs font-semibold text-slate-500">Upload UPI QR Image</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
                   <button
                     type="submit"
                     disabled={upiLoading}
@@ -1746,10 +1709,6 @@ const WorkerDashboard = () => {
 
                   <div className="text-xs text-slate-655 space-y-2">
                     <div>Requested UPI ID: <strong className="text-slate-800 font-mono">{upiRequest.newUpiId}</strong></div>
-                    <div className="flex gap-2 items-center">
-                      <span className="text-[9px] text-slate-400 font-bold uppercase">Requested QR Code:</span>
-                      <img src={upiRequest.newUpiQr} alt="New QR Preview" className="w-12 h-12 object-contain border border-slate-200 p-0.5 bg-white" />
-                    </div>
                   </div>
 
                   {upiRequest.status === 'pending' && (

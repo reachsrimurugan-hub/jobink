@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authService } from '../services/db';
 import i18n from '../i18n/i18n';
 
 const AuthContext = createContext(null);
@@ -23,14 +22,29 @@ export const AuthProvider = ({ children }) => {
   const endTransition = () => setIsTransitioning(false);
 
   useEffect(() => {
-    // Listen for authentication changes (both Firebase & Mock)
-    const unsubscribe = authService.onAuthChanged((user) => {
-      setCurrentUser(user);
-      setLoading(false);
+    let active = true;
+    let unsubscribe;
+
+    import('../services/db').then(({ authService }) => {
+      if (!active) return;
+      unsubscribe = authService.onAuthChanged((user) => {
+        if (!active) return;
+        setCurrentUser(user);
+        setLoading(false);
+        if (user) {
+          localStorage.setItem('jobink_loggedIn', 'true');
+        } else {
+          localStorage.setItem('jobink_loggedIn', 'false');
+        }
+      });
+    }).catch(err => {
+      console.error("Failed to load auth service:", err);
+      if (active) setLoading(false);
     });
 
     return () => {
-      if (typeof unsubscribe === 'function') {
+      active = false;
+      if (unsubscribe && typeof unsubscribe === 'function') {
         unsubscribe();
       }
     };
@@ -45,6 +59,7 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithPhone = async (phoneNumber, elementId) => {
     try {
+      const { authService } = await import('../services/db');
       const result = await authService.signInWithPhone(phoneNumber, elementId);
       setConfirmationResult(result);
       setPhoneNumberAttempt(phoneNumber);
@@ -71,6 +86,7 @@ export const AuthProvider = ({ children }) => {
 
   const loginWithGoogle = async () => {
     try {
+      const { authService } = await import('../services/db');
       const result = await authService.signInWithGoogle();
       return result.user;
     } catch (error) {
@@ -80,10 +96,12 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      const { authService } = await import('../services/db');
       await authService.logout();
       setCurrentUser(null);
       setConfirmationResult(null);
       setPhoneNumberAttempt('');
+      localStorage.setItem('jobink_loggedIn', 'false');
     } catch (error) {
       throw error;
     }
@@ -92,6 +110,7 @@ export const AuthProvider = ({ children }) => {
   const updateProfile = async (profileData) => {
     if (!currentUser) throw new Error("No active user session.");
     try {
+      const { authService } = await import('../services/db');
       const updatedUser = await authService.saveUserProfile(currentUser.uid, profileData);
       setCurrentUser(updatedUser);
       return updatedUser;
@@ -103,6 +122,7 @@ export const AuthProvider = ({ children }) => {
   const reloadProfile = async () => {
     if (!currentUser) return;
     try {
+      const { authService } = await import('../services/db');
       const freshUser = await authService.getCurrentUser(currentUser.uid);
       if (freshUser) {
         setCurrentUser(freshUser);
@@ -138,12 +158,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading ? children : (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-4">
-          <div className="spinner mb-4"></div>
-          <p className="text-slate-500 font-medium text-sm">Loading WorkLink...</p>
-        </div>
-      )}
+      {children}
     </AuthContext.Provider>
   );
 };

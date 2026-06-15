@@ -133,6 +133,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
           <select
             value={i18n.language ? i18n.language.split('-')[0] : 'en'}
             onChange={handleLanguageChange}
+            aria-label="Choose Language"
             className="text-xs font-bold bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-slate-100 transition-colors mr-1 touch-target"
           >
             <option value="en">English</option>

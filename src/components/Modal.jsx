@@ -33,6 +33,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
             type="button" 
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-50 transition-colors touch-target flex items-center justify-center"
+            aria-label="Close modal"
           >
             <X size={20} />
           </button>

@@ -22,7 +22,11 @@ const PageLoader = () => (
 
 // Private Route Wrapper: Requires authenticated session
 const PrivateRoute = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  
+  if (loading) {
+    return <PageLoader />;
+  }
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -87,7 +91,11 @@ const DashboardRoute = () => {
 
 // Admin Route Wrapper
 const AdminRoute = ({ children }) => {
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, loading } = useAuth();
+  
+  if (loading) {
+    return <PageLoader />;
+  }
   
   if (!currentUser) {
     return <Navigate to="/login" replace />;
@@ -101,7 +109,8 @@ const AdminRoute = ({ children }) => {
 };
 
 const AppRoutes = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  const isLikelyLoggedIn = localStorage.getItem('jobink_loggedIn') === 'true';
 
   return (
     <Suspense fallback={<PageLoader />}>
@@ -109,11 +118,27 @@ const AppRoutes = () => {
         {/* Public Routes */}
         <Route 
           path="/" 
-          element={currentUser ? <Navigate to="/dashboard" replace /> : <LandingPage />} 
+          element={
+            loading && isLikelyLoggedIn ? (
+              <PageLoader />
+            ) : !loading && currentUser ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <LandingPage />
+            )
+          } 
         />
         <Route 
           path="/login" 
-          element={currentUser ? <Navigate to="/dashboard" replace /> : <LoginPage />} 
+          element={
+            loading && isLikelyLoggedIn ? (
+              <PageLoader />
+            ) : !loading && currentUser ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <LoginPage />
+            )
+          } 
         />
         
         {/* Onboarding On-demand Route */}

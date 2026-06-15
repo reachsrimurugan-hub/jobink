@@ -23,6 +23,7 @@ const RatingStars = ({ rating = 0, maxStars = 5, size = 16, interactive = false,
               interactive ? 'cursor-pointer hover:scale-110 active:scale-95 touch-target flex items-center justify-center' : 'cursor-default'
             }`}
             style={{ width: interactive ? size + 16 : size, height: interactive ? size + 16 : size }}
+            aria-label={interactive ? `Rate ${starVal} out of ${maxStars} stars` : `${starVal} Star`}
           >
             <Star
               size={size}
