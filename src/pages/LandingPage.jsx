@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Briefcase, 
   Users, 
@@ -8,16 +9,7 @@ import {
   Coins, 
   Clock
 } from 'lucide-react';
-// Preload Landing Page LCP hero image when module is loaded
-(() => {
-  const link = document.createElement('link');
-  link.rel = 'preload';
-  link.as = 'image';
-  link.href = '/hero_illustration.webp';
-  link.type = 'image/webp';
-  link.fetchPriority = 'high';
-  document.head.appendChild(link);
-})();
+
 
 const LandingPage = () => {
   const navigate = useNavigate();
