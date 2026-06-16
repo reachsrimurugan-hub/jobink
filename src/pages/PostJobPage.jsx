@@ -6,6 +6,7 @@ import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
 import { ArrowLeft, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getDefaultCoordinates } from '../utils/geo';
 
 const PostJobPage = () => {
   const { currentUser } = useAuth();
@@ -18,6 +19,8 @@ const PostJobPage = () => {
   const [area, setArea] = useState(currentUser?.area || '');
   const [workingHours, setWorkingHours] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
+  const [startDate, setStartDate] = useState('');
+  const [isUrgentExplicit, setIsUrgentExplicit] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -51,6 +54,7 @@ const PostJobPage = () => {
 
     try {
       setLoading(true);
+      const coords = getDefaultCoordinates(city, area);
       const jobData = {
         employerId: currentUser.uid,
         employerName: currentUser.name,
@@ -63,7 +67,11 @@ const PostJobPage = () => {
         city,
         area,
         workingHours,
-        workersNeeded: Number(workersNeeded)
+        workersNeeded: Number(workersNeeded),
+        startDate: startDate || '',
+        isUrgentExplicit,
+        latitude: coords.lat,
+        longitude: coords.lng
       };
 
       await jobService.createJob(jobData);
@@ -211,7 +219,7 @@ const PostJobPage = () => {
                     setCity(e.target.value);
                     setArea('');
                   }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-850 touch-target"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-855 touch-target"
                   required
                   disabled={loading}
                 >
@@ -239,6 +247,38 @@ const PostJobPage = () => {
                     <option key={a} value={a}>{a}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Start Date & Urgent Hiring Option */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="startDate" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+                  Job Start Date & Time
+                </label>
+                <input
+                  id="startDate"
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="flex items-center sm:pt-6 pt-2">
+                <input
+                  id="isUrgentExplicit"
+                  type="checkbox"
+                  checked={isUrgentExplicit}
+                  onChange={(e) => setIsUrgentExplicit(e.target.checked)}
+                  className="h-4 w-4 text-primary focus:ring-primary border-slate-300 rounded cursor-pointer"
+                  disabled={loading}
+                />
+                <label htmlFor="isUrgentExplicit" className="ml-2 block text-xs font-bold text-slate-700 uppercase cursor-pointer select-none">
+                  ⚡ Mark as Urgent Hiring
+                </label>
               </div>
             </div>
 

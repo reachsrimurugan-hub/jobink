@@ -9,7 +9,7 @@ import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
 const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
-import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, CheckCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
+import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.webp';
 // Client-side image compression helper using HTML5 Canvas
@@ -172,6 +172,22 @@ const EmployerDashboard = () => {
       setEditPhone(currentUser.phone || '');
       setNewName(currentUser.name || '');
       setNewUpiId(currentUser.upiId || '');
+    }
+  }, [currentUser]);
+
+  // Register FCM push notifications in the background after dashboard renders
+  useEffect(() => {
+    if (currentUser?.uid) {
+      const timer = setTimeout(() => {
+        import('../services/notifications')
+          .then(({ initializeNotificationToken }) => {
+            initializeNotificationToken(currentUser.uid);
+          })
+          .catch(err => {
+            console.warn("Failed to load notifications service dynamically:", err);
+          });
+      }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [currentUser]);
 
@@ -942,7 +958,7 @@ const EmployerDashboard = () => {
                 </div>
 
                 {/* Bottom Columns */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                   {/* Column 1: Current Open Posts */}
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center px-1">
@@ -1028,52 +1044,6 @@ const EmployerDashboard = () => {
                           })}
                         </div>
                       )}
-                    </div>
-                  </div>
-
-                  {/* Column 3: Query Admin */}
-                  <div className="flex flex-col gap-3">
-                    <div className="flex justify-between items-center px-1">
-                      <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider">
-                        💬 Query Admin
-                      </h3>
-                    </div>
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm text-left min-h-[220px] flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <p className="text-slate-500 text-[11px] leading-relaxed">
-                          Need assistance or have query regarding listings? Send a direct message to the admin.
-                        </p>
-
-                        {queryError && (
-                          <div className="bg-red-50 text-red-700 text-[10px] font-semibold p-2 rounded border border-red-100">
-                            {queryError}
-                          </div>
-                        )}
-                        {querySuccess && (
-                          <div className="bg-green-50 text-green-700 text-[10px] font-semibold p-2 rounded border border-green-100">
-                            {querySuccess}
-                          </div>
-                        )}
-                      </div>
-
-                      <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3 text-xs mt-3">
-                        <textarea
-                          rows={3}
-                          placeholder="Type your query here..."
-                          value={queryText}
-                          onChange={(e) => setQueryText(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800 text-[11px]"
-                          required
-                          disabled={queryLoading}
-                        />
-                        <button
-                          type="submit"
-                          disabled={queryLoading}
-                          className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
-                        >
-                          {queryLoading ? 'Sending...' : 'Send Message'}
-                        </button>
-                      </form>
                     </div>
                   </div>
                 </div>
@@ -1409,6 +1379,47 @@ const EmployerDashboard = () => {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Query Admin Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-left flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <MessageSquare className="text-primary shrink-0" size={18} />
+                  <h3 className="font-extrabold text-slate-800 text-sm"> Query Admin</h3>
+                </div>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Need assistance or have query regarding listings? Send a direct message to the admin.
+                </p>
+
+                {queryError && (
+                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                    {queryError}
+                  </div>
+                )}
+                {querySuccess && (
+                  <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                    {querySuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3.5 text-xs">
+                  <textarea
+                    rows={4}
+                    placeholder="Describe your query or issue here..."
+                    value={queryText}
+                    onChange={(e) => setQueryText(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800"
+                    required
+                    disabled={queryLoading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={queryLoading}
+                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
+                  >
+                    {queryLoading ? 'Sending...' : 'Send Message'}
+                  </button>
+                </form>
               </div>
 
               {/* Support & Settings Card */}

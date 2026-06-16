@@ -7,23 +7,16 @@ export const LOCATIONS = {
     "Ukkadam",
     "Kuniyamuthur",
     "Singanallur",
-    "Gandhipuram"
-  ],
-  "Madurai": [
-    "Tallakulam",
-    "Anna Nagar",
-    "KK Nagar",
-    "Kovilpatti",
-    "Natham",
-    "Sivagangai",
-    "Virudhunagar"
-  ],
-  "Salem": [
-    "Railway Station",
-    "Fort",
-    "New Bus Stand",
-    "Steel Plant",
-    "Yercaud"
+    "Gandhipuram",
+    "selvapuram",
+    "perur",
+    "gandhipark",
+    "racecourse",
+    "peelamedu",
+    "sathy road",
+    "tidel park",
+    "telungupalayam",
+    
   ]
 };
 

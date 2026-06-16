@@ -374,7 +374,24 @@
   "cleaning": "Cleaning",
   "delivery": "Delivery",
   "eventSetup": "Event Setup",
-  "helperJobs": "Helper Jobs"
+  "helperJobs": "Helper Jobs",
+  "startsSoon": "Starts Soon",
+  "immediateHiring": "Immediate Hiring",
+  "urgent": "Urgent",
+  "nearby": "Nearby",
+  "sortNearestFirst": "Nearest First",
+  "sortHighestPay": "Highest Pay",
+  "sortMostRecent": "Most Recent",
+  "sortUrgentFirst": "Urgent First",
+  "filterWithin2km": "Within 2 km",
+  "filterWithin5km": "Within 5 km",
+  "filterWithin10km": "Within 10 km",
+  "filterCustomRadius": "Custom Radius",
+  "urgentJobsOnly": "Urgent Jobs Only",
+  "jobsNearYou": "Jobs Near You",
+  "maxDistance": "Max Distance",
+  "sortBy": "Sort By",
+  "nearbyHighlight": "Nearby"
 }
 
 

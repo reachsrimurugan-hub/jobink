@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
 import { CITIES, LOCATIONS } from '../utils/locations';
+import { getDistance, formatDistance, getDefaultCoordinates, getJobUrgentBadge } from '../utils/geo';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
@@ -10,7 +11,7 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
 import Modal from '../components/Modal';
-import { MapPin, Briefcase, Bell, User, Clock, Star, Edit3, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload, Camera, XCircle, CheckCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
+import { MapPin, Briefcase, Bell, User, Clock, Star, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload, Camera, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // Client-side image compression helper using HTML5 Canvas
@@ -143,6 +144,41 @@ const WorkerDashboard = () => {
   const [reVerifSuccess, setReVerifSuccess] = useState('');
   const [reVerifError, setReVerifError] = useState('');
 
+  // Geolocation and sorting/filtering states
+  const [workerCoords, setWorkerCoords] = useState(null);
+  const [filterMaxDistance, setFilterMaxDistance] = useState('all');
+  const [customDistanceRadius, setCustomDistanceRadius] = useState(15);
+  const [sortBy, setSortBy] = useState('recent');
+
+  // Geolocation Permission & Fallback Fetch
+  useEffect(() => {
+    if (!currentUser) return;
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          setWorkerCoords(coords);
+          console.log("Worker coordinates loaded via browser geolocation:", coords);
+        },
+        (error) => {
+          console.warn("Geolocation denied/error. Loading profile area default coordinates:", error.message);
+          const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
+          setWorkerCoords(fallback);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    } else {
+      console.warn("Browser does not support Geolocation. Loading profile area default coordinates.");
+      const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
+      setTimeout(() => {
+        setWorkerCoords(fallback);
+      }, 0);
+    }
+  }, [currentUser]);
+
   // Sync profile details state from currentUser
   useEffect(() => {
     if (currentUser) {
@@ -153,6 +189,22 @@ const WorkerDashboard = () => {
         setNewName(currentUser.name || '');
         setNewUpiId(currentUser.upiId || '');
       }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [currentUser]);
+
+  // Register FCM push notifications in the background after dashboard renders
+  useEffect(() => {
+    if (currentUser?.uid) {
+      const timer = setTimeout(() => {
+        import('../services/notifications')
+          .then(({ initializeNotificationToken }) => {
+            initializeNotificationToken(currentUser.uid);
+          })
+          .catch(err => {
+            console.warn("Failed to load notifications service dynamically:", err);
+          });
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [currentUser]);
@@ -358,7 +410,6 @@ const WorkerDashboard = () => {
       });
       setReVerifSuccess('Trust verification details re-submitted successfully!');
       setReUpiId('');
-      setReUpiQr('');
       setReSelfie('');
       await reloadProfile();
       setReVerifLoading(false);
@@ -656,8 +707,74 @@ const WorkerDashboard = () => {
       );
     }
 
+
+
+    // 3. Distance Filter
+    if (workerCoords) {
+      // Calculate distance for all jobs first so we can filter and sort
+      result = result.map(job => {
+        const dist = (job.latitude !== undefined && job.longitude !== undefined)
+          ? getDistance(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+          : null;
+        return { ...job, _distance: dist };
+      });
+
+      if (filterMaxDistance !== 'all') {
+        const maxDist = filterMaxDistance === 'custom' 
+          ? customDistanceRadius 
+          : parseFloat(filterMaxDistance);
+        
+        result = result.filter(job => job._distance !== null && job._distance <= maxDist);
+      }
+    }
+
+    // 4. Sorting
+    result.sort((a, b) => {
+      if (sortBy === 'distance' && workerCoords) {
+        const distA = a._distance !== undefined && a._distance !== null ? a._distance : 999999;
+        const distB = b._distance !== undefined && b._distance !== null ? b._distance : 999999;
+        return distA - distB;
+      }
+      
+      if (sortBy === 'pay') {
+        const payA = a.payment || 0;
+        const payB = b.payment || 0;
+        return payB - payA;
+      }
+
+      if (sortBy === 'urgent') {
+        const badgeA = getJobUrgentBadge(a) ? 1 : 0;
+        const badgeB = getJobUrgentBadge(b) ? 1 : 0;
+        if (badgeA !== badgeB) {
+          return badgeB - badgeA;
+        }
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA;
+      }
+
+      // Default: 'recent'
+      const dateA = new Date(a.createdAt || 0);
+      const dateB = new Date(b.createdAt || 0);
+      return dateB - dateA;
+    });
+
     return result;
-  }, [jobs, searchQuery]);
+  }, [jobs, searchQuery, workerCoords, filterMaxDistance, customDistanceRadius, sortBy]);
+
+  const nearbyJobs = useMemo(() => {
+    if (!workerCoords || jobs.length === 0) return [];
+    return jobs
+      .map(job => {
+        const dist = (job.latitude !== undefined && job.longitude !== undefined)
+          ? getDistance(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+          : null;
+        return { ...job, _distance: dist };
+      })
+      .filter(job => job._distance !== null && job._distance <= 5) // within 5km is nearby
+      .sort((a, b) => a._distance - b._distance)
+      .slice(0, 5); // top 5 closest
+  }, [jobs, workerCoords]);
 
   const filteredApplications = useMemo(() => {
     let result = [...myApplications];
@@ -738,9 +855,7 @@ const WorkerDashboard = () => {
 
           {/* TAB 1: Job Feed */}
           {activeTab === 'home' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-              {/* Left & Center Columns: Job Feed */}
-              <div className="md:col-span-2 flex flex-col gap-6">
+            <div className="flex flex-col gap-6 text-left">
                 {/* Availability Panel */}
                 <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
                   <div className="text-left">
@@ -819,7 +934,115 @@ const WorkerDashboard = () => {
                       </select>
                     </div>
                   </div>
+
+                  {/* Distance and Sort Filters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100 mt-1">
+                    {/* Distance Filter */}
+                    <div>
+                      <label htmlFor="feedDistance" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">
+                        {t('maxDistance')}
+                      </label>
+                      <select
+                        id="feedDistance"
+                        value={filterMaxDistance}
+                        onChange={(e) => setFilterMaxDistance(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
+                        disabled={!workerCoords}
+                      >
+                        <option value="all">{t('allLocations')}</option>
+                        <option value="2">{t('filterWithin2km')}</option>
+                        <option value="5">{t('filterWithin5km')}</option>
+                        <option value="10">{t('filterWithin10km')}</option>
+                        <option value="custom">{t('filterCustomRadius')}</option>
+                      </select>
+                    </div>
+
+                    {/* Sort By Filter */}
+                    <div>
+                      <label htmlFor="feedSort" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">
+                        {t('sortBy')}
+                      </label>
+                      <select
+                        id="feedSort"
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
+                      >
+                        <option value="recent">{t('sortMostRecent')}</option>
+                        <option value="distance" disabled={!workerCoords}>{t('sortNearestFirst')}</option>
+                        <option value="pay">{t('sortHighestPay')}</option>
+                        <option value="urgent">{t('sortUrgentFirst')}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Custom Radius Slider */}
+                  {filterMaxDistance === 'custom' && workerCoords && (
+                    <div className="bg-slate-50 p-3.5 border border-slate-200 rounded-xl mt-1 animate-in fade-in duration-200">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Radius Distance</span>
+                        <span className="text-xs font-bold text-primary">{customDistanceRadius} km</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max="50"
+                        value={customDistanceRadius}
+                        onChange={(e) => setCustomDistanceRadius(parseInt(e.target.value))}
+                        className="w-full accent-primary h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase mt-1">
+                        <span>1 km</span>
+                        <span>25 km</span>
+                        <span>50 km</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Jobs Near You Carousel */}
+                {nearbyJobs.length > 0 && (
+                  <div className="mb-2 bg-emerald-50/5 border border-emerald-100 p-5 rounded-2xl shadow-sm text-left">
+                    <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                      <MapPin size={16} className="text-emerald-500 animate-bounce" />
+                      {t('jobsNearYou')}
+                    </h3>
+                    <div className="flex gap-4 overflow-x-auto pb-2.5 pt-0.5 scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                      {nearbyJobs.map(job => (
+                        <div key={`nearby-${job.id}`} className="flex-shrink-0 w-72 bg-white border border-slate-150 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all flex flex-col justify-between gap-3 text-left">
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-bold text-slate-800 text-sm line-clamp-1">{job.title}</h4>
+                              <span className="bg-emerald-50 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                                {formatDistance(job._distance, t)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{job.description}</p>
+                          </div>
+                          <div className="flex items-center justify-between mt-1 pt-2 border-t border-slate-100">
+                            <span className="font-bold text-slate-800 text-xs">₹{job.payment} <span className="text-[9px] text-slate-400 font-normal">/{job.paymentType}</span></span>
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const element = document.getElementById(`job-${job.id}`);
+                                if (element) {
+                                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  element.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-2');
+                                  setTimeout(() => {
+                                    element.classList.remove('ring-2', 'ring-emerald-400', 'ring-offset-2');
+                                  }, 2000);
+                                }
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-[10px] shadow-sm transition-colors cursor-pointer"
+                            >
+                              {t('viewDetails')}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Jobs List */}
                 <div>
@@ -866,16 +1089,18 @@ const WorkerDashboard = () => {
                         const appStatus = myApplications.find(app => app.jobId === job.id)?.status;
                         
                         return (
-                          <JobCard
-                            key={job.id}
-                            job={job}
-                            userRole="worker"
-                            isApplied={isApplied}
-                            applicationStatus={appStatus}
-                            isUserVerified={currentUser.verified}
-                            onApply={handleApplyJob}
-                            onViewEmployerProfile={handleViewEmployerProfile}
-                          />
+                          <div key={job.id} id={`job-${job.id}`} className="transition-all duration-300 rounded-2xl">
+                            <JobCard
+                              job={job}
+                              userRole="worker"
+                              isApplied={isApplied}
+                              applicationStatus={appStatus}
+                              isUserVerified={currentUser.verified}
+                              onApply={handleApplyJob}
+                              onViewEmployerProfile={handleViewEmployerProfile}
+                              workerCoords={workerCoords}
+                            />
+                          </div>
                         );
                       })}
                     </div>
@@ -894,55 +1119,6 @@ const WorkerDashboard = () => {
                   )}
                   <div ref={lastJobElementRef} className="h-2"></div>
                 </div>
-              </div>
-
-              {/* Right Column: Query Admin */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                  <MessageSquare className="text-primary shrink-0" size={18} />
-                  <h3 className="font-extrabold text-slate-800 text-sm">💬 Query Admin</h3>
-                </div>
-                <p className="text-slate-500 text-xs leading-relaxed">
-                  Have any queries or need assistance? Type your message below to notify the Jobink admin directly.
-                </p>
-
-                {queryError && (
-                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-                    {queryError}
-                  </div>
-                )}
-                {querySuccess && (
-                  <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                    {querySuccess}
-                  </div>
-                )}
-
-                <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3.5 text-xs">
-                  <div>
-                    <label htmlFor="workerQueryText" className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
-                      Your Message
-                    </label>
-                    <textarea
-                      id="workerQueryText"
-                      rows={4}
-                      placeholder="Describe your query or issue here..."
-                      value={queryText}
-                      onChange={(e) => setQueryText(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800"
-                      required
-                      disabled={queryLoading}
-                    />
-                  </div>
-                  
-                  <button
-                    type="submit"
-                    disabled={queryLoading}
-                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
-                  >
-                    {queryLoading ? 'Sending...' : 'Send Message'}
-                  </button>
-                </form>
-              </div>
             </div>
           )}
 
@@ -1412,6 +1588,54 @@ const WorkerDashboard = () => {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Query Admin Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-left flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <MessageSquare className="text-primary shrink-0" size={18} />
+                  <h3 className="font-extrabold text-slate-800 text-sm"> Query Admin</h3>
+                </div>
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Have any queries or need assistance? Type your message below to notify the Jobink admin directly.
+                </p>
+
+                {queryError && (
+                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
+                    {queryError}
+                  </div>
+                )}
+                {querySuccess && (
+                  <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
+                    {querySuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3.5 text-xs">
+                  <div>
+                    <label htmlFor="workerQueryText" className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">
+                      Your Message
+                    </label>
+                    <textarea
+                      id="workerQueryText"
+                      rows={4}
+                      placeholder="Describe your query or issue here..."
+                      value={queryText}
+                      onChange={(e) => setQueryText(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800"
+                      required
+                      disabled={queryLoading}
+                    />
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={queryLoading}
+                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
+                  >
+                    {queryLoading ? 'Sending...' : 'Send Message'}
+                  </button>
+                </form>
               </div>
 
               {/* Support & Settings Card */}

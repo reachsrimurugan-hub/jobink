@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, Clock, IndianRupee, Users, BadgeCheck, Phone, MessageSquare, Briefcase, MoreVertical, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, Clock, IndianRupee, Users, Phone, MessageSquare, Briefcase, MoreVertical, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { authService } from '../services/db';
 import JobProgressTracker from './JobProgressTracker';
+import { getDistance, formatDistance, getJobUrgentBadge } from '../utils/geo';
 
 const JobCard = ({ 
   job, 
@@ -17,7 +18,8 @@ const JobCard = ({
   onViewEmployerProfile,
   onMarkPaid,
   onRespondToDispute,
-  hideProgress
+  hideProgress,
+  workerCoords
 }) => {
   const { t, i18n } = useTranslation();
   const isTamil = i18n.language?.startsWith('ta');
@@ -28,6 +30,13 @@ const JobCard = ({
   const [copied, setCopied] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const distance = (workerCoords && job.latitude !== undefined && job.longitude !== undefined)
+    ? getDistance(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+    : null;
+  const isNearby = distance !== null && distance <= 2;
+  const formattedDistance = formatDistance(distance, t);
+  const urgentBadge = getJobUrgentBadge(job);
 
   const { 
     title, 
@@ -178,7 +187,6 @@ const JobCard = ({
 
   // Split location by comma
   const locationParts = location ? location.split(',') : ['', ''];
-  const cityPart = locationParts[0] ? locationParts[0].trim() : '';
   const areaPart = locationParts[1] ? locationParts[1].trim() : '';
 
   // Split working hours by comma to extract duration sub-text
@@ -196,7 +204,7 @@ const JobCard = ({
         month: 'short',
         year: 'numeric'
       });
-    } catch (e) {
+    } catch {
       return '';
     }
   };
@@ -204,7 +212,11 @@ const JobCard = ({
   const hasActions = (status === 'booked' && onMarkCompleted) || (status === 'open' && onDelete);
 
   return (
-    <div className="bg-white border border-slate-150 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between gap-5 text-left relative">
+    <div className={`border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-250 flex flex-col justify-between gap-5 text-left relative ${
+      isNearby 
+        ? 'border-emerald-250 bg-emerald-50/10 hover:border-emerald-350 shadow-emerald-50/20' 
+        : 'bg-white border-slate-150'
+    }`}>
       {/* Expand/Collapse arrow near top right corner */}
       <button
         type="button"
@@ -225,9 +237,27 @@ const JobCard = ({
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Header: Title only — status moved to footer */}
+            {/* Header: Title and Badges */}
             <div className="flex items-center gap-2 flex-wrap text-left pr-10">
               <h4 className="font-bold text-slate-800 text-base leading-snug truncate pr-2">{title}</h4>
+              {isNearby && (
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                  <MapPin size={10} className="stroke-[2.5]" />
+                  {t('nearbyHighlight')}
+                </span>
+              )}
+              {urgentBadge && (
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border flex items-center gap-1 shrink-0 ${
+                  urgentBadge.type === 'starts_soon' 
+                    ? 'bg-red-50 text-red-700 border-red-200 animate-pulse' 
+                    : urgentBadge.type === 'immediate' 
+                      ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                      : 'bg-orange-50 text-orange-700 border-orange-200'
+                }`}>
+                  <span>{urgentBadge.emoji}</span>
+                  <span>{t(urgentBadge.type === 'starts_soon' ? 'startsSoon' : urgentBadge.type === 'immediate' ? 'immediateHiring' : 'urgent')}</span>
+                </span>
+              )}
             </div>
 
             {/* Posted date/time below title */}
@@ -260,7 +290,14 @@ const JobCard = ({
             </div>
             <div className="text-left min-w-0 flex-1">
               <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{areaPart || t('location')}</div>
-              <div className={`font-bold text-slate-800 leading-normal ${valueClass}`} title={location}>{location}</div>
+              <div className={`font-bold text-slate-800 leading-normal flex flex-wrap items-center gap-1.5 ${valueClass}`} title={location}>
+                <span>{location}</span>
+                {distance !== null && (
+                  <span className="text-[11px] font-extrabold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md shrink-0">
+                    {formattedDistance}
+                  </span>
+                )}
+              </div>
               {description && (
                 <p className="text-slate-400 text-[11px] mt-1 leading-relaxed break-words">{description}</p>
               )}
@@ -412,8 +449,7 @@ const JobCard = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const cleanNum = workerProfile.phone.replace(/[^0-9]/g, '').slice(-10);
-                                    navigator.clipboard.writeText(cleanNum);
+                                    navigator.clipboard.writeText(cleanPhone);
                                     setCopied(true);
                                     setTimeout(() => setCopied(false), 2000);
                                   }}

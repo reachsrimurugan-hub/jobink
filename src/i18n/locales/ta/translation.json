@@ -126,7 +126,7 @@
   "myAvailability": "என் இருப்பு",
   "availableDesc": "வேலைக்குத் தயார். முதலாளிகள் உங்களைத் தேர்ந்தெடுக்கலாம்.",
   "busyDesc": "தற்போது பிஸியாக உள்ளார். தேடலில் இருந்து மறைக்கப்பட்டுள்ளார்.",
-  "available": "இருக்கிறேன்",
+  "available": "வேலைக்கு தயார்",
   "busy": "பிஸியாக உள்ளேன்",
   "updating": "புதுப்பிக்கப்படுகிறது...",
   "filterHyperlocalJobs": "அருகிலுள்ள வேலைகளை பார்க்கவும்",
@@ -374,7 +374,24 @@
   "cleaning": "சுத்தம் செய்தல்",
   "delivery": "டெலிவரி",
   "eventSetup": "நிகழ்ச்சி அமைப்பு",
-  "helperJobs": "உதவியாளர் வேலைகள்"
+  "helperJobs": "உதவியாளர் வேலைகள்",
+  "startsSoon": "விரைவில் தொடங்கும்",
+  "immediateHiring": "உடனடி வேலை",
+  "urgent": "அவசரம்",
+  "nearby": "அருகில்",
+  "sortNearestFirst": "அருகில் உள்ளவை முதலில்",
+  "sortHighestPay": "அதிக சம்பளம்",
+  "sortMostRecent": "சமீபத்தியவை",
+  "sortUrgentFirst": "அவசர வேலைகள் முதலில்",
+  "filterWithin2km": "2 கிமீக்குள்",
+  "filterWithin5km": "5 கிமீக்குள்",
+  "filterWithin10km": "10 கிமீக்குள்",
+  "filterCustomRadius": "தனிப்பயன் வரம்பு",
+  "urgentJobsOnly": "அவசர வேலைகள் மட்டும்",
+  "jobsNearYou": "உங்களுக்கு அருகில் உள்ள வேலைகள்",
+  "maxDistance": "அதிகபட்ச தூரம்",
+  "sortBy": "வரிசைப்படுத்து",
+  "nearbyHighlight": "அருகில்"
 }
 
 

@@ -96,7 +96,7 @@ export const recalculateUserTrustAndVerification = async (uid) => {
 
   await updateDoc(userRef, updates);
   profileCache.delete(uid); // Invalidate cached profile
-  return { ...user, ...updates };
+  return { uid, ...user, ...updates };
 };
 
 // Centralized user flagging rule checks
@@ -234,6 +234,12 @@ export const authService = {
 
   // Logout current session
   logout: async () => {
+    try {
+      const { cleanUpNotificationToken } = await import('./notifications');
+      await cleanUpNotificationToken();
+    } catch (err) {
+      console.warn("Failed to clean up FCM token on logout:", err);
+    }
     clearProfileCache();
     await fbSignOut(auth);
     return true;
@@ -1274,12 +1280,19 @@ export const applicationService = {
     const jobRef = doc(db, 'jobs', jobId);
     const jobSnap = await getDoc(jobRef);
     if (jobSnap.exists()) {
-      const applicants = jobSnap.data().applicants || [];
+      const job = jobSnap.data();
+      const applicants = job.applicants || [];
       if (!applicants.includes(worker.uid)) {
         await updateDoc(jobRef, {
           applicants: [...applicants, worker.uid]
         });
       }
+      // Send application alert notification to Employer
+      await notificationService.addNotification(
+        job.employerId,
+        "New Application Received",
+        `Worker ${worker.name} has applied for your job "${job.title}".`
+      );
     }
     return true;
   },
