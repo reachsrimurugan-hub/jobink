@@ -175,22 +175,6 @@ const EmployerDashboard = () => {
     }
   }, [currentUser]);
 
-  // Register FCM push notifications in the background after dashboard renders
-  useEffect(() => {
-    if (currentUser?.uid) {
-      const timer = setTimeout(() => {
-        import('../services/notifications')
-          .then(({ initializeNotificationToken }) => {
-            initializeNotificationToken(currentUser.uid);
-          })
-          .catch(err => {
-            console.warn("Failed to load notifications service dynamically:", err);
-          });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [currentUser]);
-
   // Close filter dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
