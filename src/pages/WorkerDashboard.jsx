@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } fro
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
-import { CITIES, LOCATIONS } from '../utils/locations';
 import { getDistance, formatDistance, getDefaultCoordinates, getJobUrgentBadge } from '../utils/geo';
+import { reverseGeocode } from '../services/geoapify';
+import LocationAutocompleteModal from '../components/LocationAutocompleteModal';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
@@ -11,7 +12,7 @@ import NotificationCard from '../components/NotificationCard';
 import RatingStars from '../components/RatingStars';
 const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
 import Modal from '../components/Modal';
-import { MapPin, Briefcase, Bell, User, Clock, Star, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload, Camera, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
+import { MapPin, Briefcase, Bell, User, Clock, Star, ShieldAlert, MessageSquare, Search, Filter, SlidersHorizontal, Phone, Upload, Camera, HelpCircle, FileText, ChevronRight, LogOut, Loader2, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 // Client-side image compression helper using HTML5 Canvas
@@ -78,9 +79,11 @@ const WorkerDashboard = () => {
     setIsProfileModalOpen(true);
   };
   
-  // Filtering States (Default to worker's registered location)
-  const [filterCity, setFilterCity] = useState(currentUser?.city || '');
-  const [filterArea, setFilterArea] = useState(currentUser?.area || '');
+  // Location States
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [permissionError, setPermissionError] = useState('');
+  const [gpsLoading, setGpsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Applications Filtering States
@@ -150,6 +153,21 @@ const WorkerDashboard = () => {
   const [customDistanceRadius, setCustomDistanceRadius] = useState(15);
   const [sortBy, setSortBy] = useState('recent');
 
+  const isLocationExpired = () => {
+    if (!currentUser) return false;
+    if (!currentUser.formattedAddress || !currentUser.locationUpdatedAt) return true;
+    const elapsed = Date.now() - new Date(currentUser.locationUpdatedAt).getTime();
+    return elapsed > 24 * 60 * 60 * 1000; // 24 hours
+  };
+
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'worker') {
+      if (!currentUser.formattedAddress || isLocationExpired()) {
+        setShowPermissionModal(true);
+      }
+    }
+  }, [currentUser]);
+
   // Geolocation Permission & Fallback Fetch
   useEffect(() => {
     if (!currentUser) return;
@@ -164,20 +182,46 @@ const WorkerDashboard = () => {
           console.log("Worker coordinates loaded via browser geolocation:", coords);
         },
         (error) => {
-          console.warn("Geolocation denied/error. Loading profile area default coordinates:", error.message);
-          const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
-          setWorkerCoords(fallback);
+          console.warn("Geolocation denied/error. Loading profile coordinates:", error.message);
+          if (currentUser.latitude && currentUser.longitude) {
+            setWorkerCoords({ lat: currentUser.latitude, lng: currentUser.longitude });
+          } else {
+            const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
+            setWorkerCoords(fallback);
+          }
         },
         { enableHighAccuracy: true, timeout: 8000 }
       );
     } else {
-      console.warn("Browser does not support Geolocation. Loading profile area default coordinates.");
-      const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
-      setTimeout(() => {
+      console.warn("Browser does not support Geolocation. Loading profile coordinates.");
+      if (currentUser.latitude && currentUser.longitude) {
+        setWorkerCoords({ lat: currentUser.latitude, lng: currentUser.longitude });
+      } else {
+        const fallback = getDefaultCoordinates(currentUser.city, currentUser.area);
         setWorkerCoords(fallback);
-      }, 0);
+      }
     }
   }, [currentUser]);
+
+  const handleLocationSelect = async (loc) => {
+    try {
+      setLoading(true);
+      await updateProfile({
+        ...loc,
+        location: loc.formattedAddress || `${loc.locality}, ${loc.city}`,
+        city: loc.city || '',
+        area: loc.locality || loc.city || '',
+        locationUpdatedAt: new Date().toISOString()
+      });
+      setWorkerCoords({ lat: loc.latitude, lng: loc.longitude });
+      await reloadProfile();
+      setShowPermissionModal(false);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to update profile location:", err);
+      setLoading(false);
+    }
+  };
 
   // Sync profile details state from currentUser
   useEffect(() => {
@@ -516,14 +560,14 @@ const WorkerDashboard = () => {
   const loadJobs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await jobService.getJobs(filterCity, filterArea, jobsLimit);
+      const data = await jobService.getJobs(null, null, jobsLimit);
       setJobs(data);
       setLoading(false);
     } catch (err) {
       console.error(err);
       setLoading(false);
     }
-  }, [filterCity, filterArea, jobsLimit]);
+  }, [jobsLimit]);
 
   const loadApplications = useCallback(async () => {
     try {
@@ -572,7 +616,7 @@ const WorkerDashboard = () => {
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [activeTab, filterCity, filterArea, loadJobs, loadApplications, loadReviews, reloadProfile, loadRequests]);
+  }, [activeTab, loadJobs, loadApplications, loadReviews, reloadProfile, loadRequests]);
 
   // Handle availability toggle
   const handleAvailabilityToggle = async () => {
@@ -866,11 +910,6 @@ const WorkerDashboard = () => {
 
                 {/* Search & Filter Panel */}
                 <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm text-left flex flex-col gap-4">
-                  <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                    <SlidersHorizontal size={16} className="text-primary" />
-                    {t('filterHyperlocalJobs')}
-                  </h3>
-
                   {/* 1. Search Bar */}
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -883,105 +922,25 @@ const WorkerDashboard = () => {
                     />
                   </div>
 
-                  {/* 2. City & Area Selectors */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor="feedCity" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">{t('city')}</label>
-                      <select
-                        id="feedCity"
-                        value={filterCity}
-                        onChange={(e) => {
-                          setFilterCity(e.target.value);
-                          setFilterArea('');
-                        }}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
-                      >
-                        <option value="">{t('allCities')}</option>
-                        {CITIES.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="feedArea" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">{t('area')}</label>
-                      <select
-                        id="feedArea"
-                        value={filterArea}
-                        onChange={(e) => setFilterArea(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
-                        disabled={!filterCity}
-                      >
-                        <option value="">{t('allAreas')}</option>
-                        {filterCity && LOCATIONS[filterCity]?.map(a => (
-                          <option key={a} value={a}>{a}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Distance and Sort Filters */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100 mt-1">
-                    {/* Distance Filter */}
-                    <div>
-                      <label htmlFor="feedDistance" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">
-                        {t('maxDistance')}
-                      </label>
-                      <select
-                        id="feedDistance"
-                        value={filterMaxDistance}
-                        onChange={(e) => setFilterMaxDistance(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
-                        disabled={!workerCoords}
-                      >
-                        <option value="all">{t('allLocations')}</option>
-                        <option value="2">{t('filterWithin2km')}</option>
-                        <option value="5">{t('filterWithin5km')}</option>
-                        <option value="10">{t('filterWithin10km')}</option>
-                        <option value="custom">{t('filterCustomRadius')}</option>
-                      </select>
-                    </div>
-
-                    {/* Sort By Filter */}
-                    <div>
-                      <label htmlFor="feedSort" className="block text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wide">
-                        {t('sortBy')}
-                      </label>
-                      <select
-                        id="feedSort"
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold bg-white text-slate-700 focus:border-primary focus:outline-none touch-target cursor-pointer"
-                      >
-                        <option value="recent">{t('sortMostRecent')}</option>
-                        <option value="distance" disabled={!workerCoords}>{t('sortNearestFirst')}</option>
-                        <option value="pay">{t('sortHighestPay')}</option>
-                        <option value="urgent">{t('sortUrgentFirst')}</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Custom Radius Slider */}
-                  {filterMaxDistance === 'custom' && workerCoords && (
-                    <div className="bg-slate-50 p-3.5 border border-slate-200 rounded-xl mt-1 animate-in fade-in duration-200">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Radius Distance</span>
-                        <span className="text-xs font-bold text-primary">{customDistanceRadius} km</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max="50"
-                        value={customDistanceRadius}
-                        onChange={(e) => setCustomDistanceRadius(parseInt(e.target.value))}
-                        className="w-full accent-primary h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                      <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase mt-1">
-                        <span>1 km</span>
-                        <span>25 km</span>
-                        <span>50 km</span>
+                  {/* Read-only Location Indicator */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center justify-between text-xs shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <MapPin size={18} className="text-primary animate-pulse" />
+                      <div>
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-wide">Jobs near you</span>
+                        <strong className="text-slate-800 font-bold block leading-snug">
+                          {currentUser?.locality || currentUser?.city || 'Your Location'}
+                        </strong>
                       </div>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer transition-colors"
+                    >
+                      Change
+                    </button>
+                  </div>
                 </div>
 
                 {/* Jobs Near You Carousel */}
@@ -1032,7 +991,7 @@ const WorkerDashboard = () => {
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                      {t('jobsIn')} {filterArea || filterCity || t('allLocations')} ({filteredAndSortedJobs.length})
+                      {t('jobsIn') || 'Jobs in'} {currentUser?.locality || currentUser?.city || t('allLocations')} ({filteredAndSortedJobs.length})
                     </h2>
                     <button 
                       type="button" 
@@ -1532,7 +1491,40 @@ const WorkerDashboard = () => {
                   </div>
                 </div>
 
+              </div>
 
+              {/* Location Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-3 text-left">
+                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <MapPin className="text-primary" size={16} />
+                  {t('location') || 'Location'}
+                </h4>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50/70 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-100">
+                    <MapPin size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Current Location</span>
+                    <strong className="text-xs font-bold text-slate-855 block mt-0.5 leading-snug">
+                      {currentUser.locality || currentUser.city || 'Verified Area'}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5 leading-normal">
+                      {currentUser.formattedAddress || currentUser.location || 'Not Specified'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1">
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                    <CheckCircle className="fill-emerald-500 text-white border-transparent" size={14} /> Verified Location
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsLocationModalOpen(true)}
+                    className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer transition-colors"
+                  >
+                    Change Location
+                  </button>
+                </div>
               </div>
 
               {/* Skills */}
@@ -2270,6 +2262,103 @@ const WorkerDashboard = () => {
           </p>
         </div>
       </Modal>
+      {isLocationModalOpen && (
+        <LocationAutocompleteModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          onSelect={handleLocationSelect}
+        />
+      )}
+
+      {/* Geolocation Permission Prompt Modal */}
+      {showPermissionModal && (
+        <Modal
+          isOpen={showPermissionModal}
+          onClose={() => {
+            if (currentUser?.formattedAddress) {
+              setShowPermissionModal(false);
+            }
+          }}
+          title="Location Access Required"
+        >
+          <div className="flex flex-col gap-4 text-center py-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto animate-bounce">
+              <MapPin size={24} />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-extrabold text-slate-800 text-sm">
+                Allow Jobink to access your location to show jobs near you.
+              </h4>
+              {permissionError && (
+                <p className="text-xs text-red-600 font-semibold mt-2 bg-red-50 p-2 rounded-lg border border-red-150">
+                  {permissionError}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPermissionError('');
+                  setGpsLoading(true);
+                  if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      async (position) => {
+                        const { latitude, longitude } = position.coords;
+                        try {
+                          const result = await reverseGeocode(latitude, longitude);
+                          if (result) {
+                            await updateProfile({
+                              ...result,
+                              location: result.formattedAddress || `${result.locality}, ${result.city}`,
+                              city: result.city || '',
+                              area: result.locality || result.city || '',
+                              locationUpdatedAt: new Date().toISOString()
+                            });
+                            setWorkerCoords({ lat: latitude, lng: longitude });
+                            await reloadProfile();
+                            setShowPermissionModal(false);
+                          } else {
+                            setPermissionError('Failed to geocode your coordinates.');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          setPermissionError('Failed to geocode location coordinates.');
+                        } finally {
+                          setGpsLoading(false);
+                        }
+                      },
+                      (error) => {
+                        console.error(error);
+                        setPermissionError('Location access is required to automatically detect your location.');
+                        setGpsLoading(false);
+                      },
+                      { enableHighAccuracy: true, timeout: 8000 }
+                    );
+                  } else {
+                    setPermissionError('Your browser does not support geolocation.');
+                    setGpsLoading(false);
+                  }
+                }}
+                disabled={gpsLoading}
+                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl text-xs shadow-sm cursor-pointer disabled:bg-slate-200 disabled:text-slate-450"
+              >
+                {gpsLoading ? 'Detecting...' : 'Enable Location'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLocationModalOpen(true);
+                }}
+                disabled={gpsLoading}
+                className="flex-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs shadow-sm cursor-pointer"
+              >
+                Choose Location
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

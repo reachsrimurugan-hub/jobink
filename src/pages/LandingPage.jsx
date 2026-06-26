@@ -28,15 +28,15 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-white flex flex-col justify-between font-sans antialiased text-slate-800">
-      
-      {/* Sticky Header */}
+
+       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-white border-b border-slate-100 py-3.5 px-6">
         <div className="max-w-6xl mx-auto flex justify-between items-center w-full">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <div className="w-8 h-8 rounded-full bg-[#2563EB] flex items-center justify-center text-white">
+            <div className="w-8 h-8 rounded-full bg-[#8f3bf6] flex items-center justify-center text-white">
               <Users size={16} />
             </div>
-            <span className="font-extrabold text-xl text-[#2563EB] tracking-tight">
+            <span className="font-extrabold text-xl text-[#8f3bf6] tracking-tight">
               Jobink
             </span>
           </div>
@@ -57,7 +57,7 @@ const LandingPage = () => {
             <button
               type="button"
               onClick={handleAction}
-              className="text-[13px] font-bold text-[#2563EB] border border-[#2563EB] px-6 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+              className="text-[13px] font-bold text-[#8f3bf6] border border-[#8f3bf6] px-6 py-2 rounded-lg hover:bg-rebeccapurple-50 transition-colors"
             >
               {t('login') || 'Login'}
             </button>
@@ -85,7 +85,7 @@ const LandingPage = () => {
                 <button
                   type="button"
                   onClick={handleAction}
-                  className="bg-[#2563EB] text-white font-bold py-3 px-8 rounded-lg text-sm flex items-center justify-center gap-2 w-fit"
+                  className="bg-[#8f3bf6] text-white font-bold py-3 px-8 rounded-lg text-sm flex items-center justify-center gap-2 w-fit"
                 >
                   <span>{t('getStartedFreeArrow') || 'Get Started Free →'}</span>
                 </button>
@@ -94,7 +94,7 @@ const LandingPage = () => {
               {/* Badges */}
               <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mt-6 border-t border-slate-100 pt-6">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-[#2563EB] fill-[#2563EB]/10" />
+                  <ShieldCheck size={16} className="text-[#8f3bf6] fill-[#8f3bf6]/10" />
                   <span className="text-[11px] font-bold text-slate-600">{t('aadhaarVerifiedWorkersBadge') || 'Aadhaar Verified Workers'}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ const LandingPage = () => {
             <div className="relative flex justify-center items-center">
               <div className="relative w-full max-w-md lg:max-w-none">
                 <img 
-                  src="/hero_illustration.webp" 
+                  src="/icons/hero_illustartion.png" 
                   alt="Jobink Illustration" 
                   fetchPriority="high"
                   width="1024"
@@ -130,31 +130,31 @@ const LandingPage = () => {
         <section className="py-8 border-y border-slate-100 bg-white px-6">
           <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-center gap-4 py-3">
-              <div className="w-12 h-12 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-rebeccapurple-50 text-[#8f3bf6] flex items-center justify-center">
                 <Users size={20} />
               </div>
               <div className="text-left">
-                <div className="text-xl font-bold text-[#2563EB]">1000+</div>
+                <div className="text-xl font-bold text-[#8f3bf6]">1000+</div>
                 <div className="text-xs font-bold text-slate-800">{t('statWorkersVerified') || 'Workers Verified'}</div>
                 <div className="text-[10px] text-slate-500 font-semibold">{t('statWorkersVerifiedDesc') || 'Aadhaar verified & trusted'}</div>
               </div>
             </div>
             <div className="flex items-center gap-4 py-3 border-t md:border-t-0 md:border-x border-slate-100 md:px-6">
-              <div className="w-12 h-12 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-rebeccapurple-50 text-[#8f3bf6] flex items-center justify-center">
                 <Briefcase size={20} />
               </div>
               <div className="text-left">
-                <div className="text-xl font-bold text-[#2563EB]">500+</div>
+                <div className="text-xl font-bold text-[#8f3bf6]">500+</div>
                 <div className="text-xs font-bold text-slate-800">{t('statLocalJobsPosted') || 'Local Jobs Posted'}</div>
                 <div className="text-[10px] text-slate-500 font-semibold">{t('statLocalJobsPostedDesc') || 'Every week by employers'}</div>
               </div>
             </div>
             <div className="flex items-center gap-4 py-3 border-t md:border-t-0 md:pl-6">
-              <div className="w-12 h-12 rounded-full bg-blue-50 text-[#2563EB] flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-rebeccapurple-50 text-[#8f3bf6] flex items-center justify-center">
                 <Clock size={20} />
               </div>
               <div className="text-left">
-                <div className="text-xl font-bold text-[#2563EB]">24/7</div>
+                <div className="text-xl font-bold text-[#8f3bf6]">24/7</div>
                 <div className="text-xs font-bold text-slate-800">{t('statAvailableNearby') || 'Available Nearby'}</div>
                 <div className="text-[10px] text-slate-500 font-semibold">{t('statAvailableNearbyDesc') || 'Connect anytime, anywhere'}</div>
               </div>
@@ -169,17 +169,17 @@ const LandingPage = () => {
       <footer className="border-t border-slate-100 py-8 px-6 bg-white">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-full bg-[#2563EB] flex items-center justify-center text-white">
+            <div className="w-6 h-6 rounded-full bg-[#8f3bf6] flex items-center justify-center text-white">
               <Users size={12} />
             </div>
-            <span className="font-bold text-md text-[#2563EB]">Jobink</span>
+            <span className="font-bold text-md text-[#8f3bf6]">Jobink</span>
           </div>
           
           <div className="flex flex-wrap items-center justify-center gap-6 text-[11px] font-bold text-slate-600">
-            <button onClick={handleAction} className="hover:text-[#2563EB] transition-colors">{t('about') || 'About'}</button>
-            <button onClick={handleAction} className="hover:text-[#2563EB] transition-colors">{t('privacyPolicy') || 'Privacy Policy'}</button>
-            <button onClick={handleAction} className="hover:text-[#2563EB] transition-colors">{t('termsConditions') || 'Terms & Conditions'}</button>
-            <button onClick={handleAction} className="hover:text-[#2563EB] transition-colors">{t('contact') || 'Contact'}</button>
+            <button onClick={handleAction} className="hover:text-[#8f3bf6] transition-colors">{t('about') || 'About'}</button>
+            <button onClick={handleAction} className="hover:text-[#8f3bf6] transition-colors">{t('privacyPolicy') || 'Privacy Policy'}</button>
+            <button onClick={handleAction} className="hover:text-[#8f3bf6] transition-colors">{t('termsConditions') || 'Terms & Conditions'}</button>
+            <button onClick={handleAction} className="hover:text-[#8f3bf6] transition-colors">{t('contact') || 'Contact'}</button>
           </div>
           
           <span className="text-[10px] text-slate-600 font-semibold">

@@ -845,7 +845,7 @@ const AdminDashboard = () => {
                           <div className="flex items-center gap-2">
                             <h4 className="font-extrabold text-slate-800 text-sm">{q.userName}</h4>
                             <span className={`text-[9px] uppercase font-extrabold px-1.5 py-0.5 rounded border ${
-                              q.userRole === 'worker' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                              q.userRole === 'worker' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-rebeccapurple-50 text-rebeccapurple-700 border-rebeccapurple-200'
                             }`}>
                               {q.userRole}
                             </span>
@@ -949,8 +949,8 @@ const AdminDashboard = () => {
                           </p>
                         </div>
                         <div>
-                          <span className="block text-[9px] uppercase font-bold text-indigo-600 mb-1">Employer Response/Proof</span>
-                          <p className="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-xs italic text-slate-700 font-medium">
+                          <span className="block text-[9px] uppercase font-bold text-rebeccapurple-600 mb-1">Employer Response/Proof</span>
+                          <p className="bg-rebeccapurple-50 border border-rebeccapurple-100 p-3 rounded-lg text-xs italic text-slate-700 font-medium">
                             "{disp.employerResponse || 'Awaiting employer response...'}"
                           </p>
                         </div>
@@ -970,7 +970,7 @@ const AdminDashboard = () => {
                           type="button"
                           onClick={() => handleResolveDispute(disp.id, 'favor_employer')}
                           disabled={loading}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm touch-target cursor-pointer"
+                          className="flex-1 bg-rebeccapurple-600 hover:bg-rebeccapurple-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1 shadow-sm touch-target cursor-pointer"
                         >
                           Resolve in Favor of Employer
                         </button>

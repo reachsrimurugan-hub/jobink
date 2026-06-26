@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { jobService } from '../services/db';
-import { CITIES, LOCATIONS } from '../utils/locations';
 import Navbar from '../components/Navbar';
-import { ArrowLeft, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, MapPin, Loader2, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getDefaultCoordinates } from '../utils/geo';
+import { reverseGeocode } from '../services/geoapify';
+import LocationAutocompleteModal from '../components/LocationAutocompleteModal';
 
 const PostJobPage = () => {
   const { currentUser } = useAuth();
@@ -15,8 +15,76 @@ const PostJobPage = () => {
   const [description, setDescription] = useState('');
   const [payment, setPayment] = useState('');
   const [paymentType, setPaymentType] = useState('per day');
-  const [city, setCity] = useState(currentUser?.city || '');
-  const [area, setArea] = useState(currentUser?.area || '');
+  // Geolocation and Geoapify States
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [formattedAddress, setFormattedAddress] = useState('');
+  const [locality, setLocality] = useState('');
+  const [city, setCity] = useState('');
+  const [district, setDistrict] = useState('');
+  const [state, setState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
+  const requestDeviceLocation = () => {
+    setLocationLoading(true);
+    setLocationError('');
+    if (!navigator.geolocation) {
+      setLocationError('Your browser does not support geolocation.');
+      setLocationLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const result = await reverseGeocode(latitude, longitude);
+          if (result) {
+            setLatitude(result.latitude);
+            setLongitude(result.longitude);
+            setFormattedAddress(result.formattedAddress);
+            setLocality(result.locality);
+            setCity(result.city);
+            setDistrict(result.district);
+            setState(result.state);
+            setPostalCode(result.postalCode);
+            setCountry(result.country);
+            setLocationError('');
+          } else {
+            setLocationError('Failed to geocode coordinates.');
+          }
+        } catch (err) {
+          console.error(err);
+          setLocationError('Failed to retrieve location details.');
+        } finally {
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setLocationError('Location access denied or unavailable.');
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const handleLocationSelect = (loc) => {
+    setLatitude(loc.latitude);
+    setLongitude(loc.longitude);
+    setFormattedAddress(loc.formattedAddress);
+    setLocality(loc.locality);
+    setCity(loc.city);
+    setDistrict(loc.district);
+    setState(loc.state);
+    setPostalCode(loc.postalCode);
+    setCountry(loc.country);
+    setLocationError('');
+  };
   const [workingHours, setWorkingHours] = useState('');
   const [workersNeeded, setWorkersNeeded] = useState(1);
   const [startDate, setStartDate] = useState('');
@@ -43,8 +111,8 @@ const PostJobPage = () => {
       setError(t('paymentPositiveAmount'));
       return;
     }
-    if (!city || !area) {
-      setError(t('pleaseSelectCityArea'));
+    if (!formattedAddress) {
+      setError('Please select or enable a verified job location.');
       return;
     }
     if (Number(workersNeeded) <= 0) {
@@ -54,7 +122,6 @@ const PostJobPage = () => {
 
     try {
       setLoading(true);
-      const coords = getDefaultCoordinates(city, area);
       const jobData = {
         employerId: currentUser.uid,
         employerName: currentUser.name,
@@ -63,15 +130,21 @@ const PostJobPage = () => {
         description,
         payment: Number(payment),
         paymentType,
-        location: `${city}, ${area}`,
-        city,
-        area,
+        location: formattedAddress || `${locality}, ${city}`,
+        city: city || '',
+        area: locality || city || '',
+        latitude,
+        longitude,
+        formattedAddress,
+        locality,
+        district,
+        state,
+        postalCode,
+        country,
         workingHours,
         workersNeeded: Number(workersNeeded),
         startDate: startDate || '',
-        isUrgentExplicit,
-        latitude: coords.lat,
-        longitude: coords.lng
+        isUrgentExplicit
       };
 
       await jobService.createJob(jobData);
@@ -206,48 +279,57 @@ const PostJobPage = () => {
               </div>
             </div>
 
-            {/* Location (City & Area) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="jobCity" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  {t('city')}
-                </label>
-                <select
-                  id="jobCity"
-                  value={city}
-                  onChange={(e) => {
-                    setCity(e.target.value);
-                    setArea('');
-                  }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-855 touch-target"
-                  required
-                  disabled={loading}
+            {/* Location selection */}
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase">
+                {t('location') || 'Job Location'}
+              </label>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={requestDeviceLocation}
+                  disabled={locationLoading}
+                  className="flex-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold py-3.5 px-4 rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-target"
                 >
-                  <option value="">{t('selectCity')}</option>
-                  {CITIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  {locationLoading ? (
+                    <>
+                      <Loader2 className="animate-spin text-slate-400" size={16} />
+                      <span>Detecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MapPin size={16} className="text-primary" />
+                      <span>Use Current Location</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  disabled={locationLoading}
+                  className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-3.5 px-4 rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-target"
+                >
+                  <Search size={16} />
+                  <span>Search Location</span>
+                </button>
               </div>
 
-              <div>
-                <label htmlFor="jobArea" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  {t('areaNeighborhood')}
-                </label>
-                <select
-                  id="jobArea"
-                  value={area}
-                  onChange={(e) => setArea(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-855 touch-target"
-                  required
-                  disabled={loading || !city}
-                >
-                  <option value="">{t('selectArea')}</option>
-                  {city && LOCATIONS[city]?.map(a => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-              </div>
+              {locationError && (
+                <div className="text-red-600 text-xs font-semibold mt-1">
+                  {locationError}
+                </div>
+              )}
+
+              {formattedAddress && (
+                <div className="bg-emerald-50/20 border border-emerald-100 rounded-xl p-4 flex items-start gap-2.5 mt-1">
+                  <MapPin size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <strong className="text-xs font-bold text-slate-800 block">Selected Job Address:</strong>
+                    <span className="text-[11px] text-slate-600 font-medium block mt-0.5 leading-relaxed">{formattedAddress}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Start Date & Urgent Hiring Option */}
@@ -333,6 +415,13 @@ const PostJobPage = () => {
           </form>
         </div>
       </main>
+      {isLocationModalOpen && (
+        <LocationAutocompleteModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          onSelect={handleLocationSelect}
+        />
+      )}
     </div>
   );
 };

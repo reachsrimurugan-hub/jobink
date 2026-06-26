@@ -9,7 +9,9 @@ import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
 const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
-import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, HelpCircle, FileText, ChevronRight, LogOut } from 'lucide-react';
+import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, HelpCircle, FileText, ChevronRight, LogOut, Loader2, CheckCircle } from 'lucide-react';
+import { reverseGeocode } from '../services/geoapify';
+import LocationAutocompleteModal from '../components/LocationAutocompleteModal';
 import { useTranslation } from 'react-i18next';
 import heroImage from '../assets/dashboard.webp';
 // Client-side image compression helper using HTML5 Canvas
@@ -136,6 +138,8 @@ const EmployerDashboard = () => {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
+  // Location States
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   // Re-verification states
   const [reUpiId, setReUpiId] = useState('');
@@ -143,6 +147,24 @@ const EmployerDashboard = () => {
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
   const [reVerifError, setReVerifError] = useState('');
+
+  const handleLocationSelect = async (loc) => {
+    try {
+      setLoading(true);
+      await updateProfile({
+        ...loc,
+        location: loc.formattedAddress || `${loc.locality}, ${loc.city}`,
+        city: loc.city || '',
+        area: loc.locality || loc.city || '',
+        locationUpdatedAt: new Date().toISOString()
+      });
+      await reloadProfile();
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to update profile location:", err);
+      setLoading(false);
+    }
+  };
 
   // Payment Confirmation Modal States
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -859,13 +881,13 @@ const EmployerDashboard = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Card 1: Active Requirements */}
                   <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-rebeccapurple-50 flex items-center justify-center text-rebeccapurple-600 shrink-0">
                       <Clipboard size={22} />
                     </div>
                     <div className="flex flex-col text-left">
                       <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{t('activeRequirements')}</span>
                       <span className="text-3xl font-extrabold text-slate-800 mt-1">{activeJobs.length}</span>
-                      <span className="text-[11px] font-bold text-blue-600 mt-2">
+                      <span className="text-[11px] font-bold text-rebeccapurple-600 mt-2">
                         {activeJobs.length === 0 ? t('youHaveNoActivePosts') : t('youHaveActiveRequirements', { count: activeJobs.length })}
                       </span>
                     </div>
@@ -915,7 +937,7 @@ const EmployerDashboard = () => {
                 </div>
 
                 {/* Banner Panel */}
-                <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative shadow-sm">
+                <div className="bg-rebeccapurple-50/70 border border-rebeccapurple-100 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative shadow-sm">
                   <div className="flex-1 space-y-4 text-left z-10">
                     <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 leading-tight">
                       {t('needHelpersTitle')}
@@ -1337,6 +1359,40 @@ const EmployerDashboard = () => {
                     <RatingStars rating={currentUser.rating} size={15} />
                     <span className="text-xs text-slate-400 font-medium">{t('reviewsCount', { count: currentUser.ratingCount || 0 })}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Location Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-3 text-left">
+                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <MapPin className="text-primary" size={16} />
+                  {t('location') || 'Location'}
+                </h4>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50/70 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-100">
+                    <MapPin size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Current Location</span>
+                    <strong className="text-xs font-bold text-slate-855 block mt-0.5 leading-snug">
+                      {currentUser.locality || currentUser.city || 'Verified Area'}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5 leading-normal">
+                      {currentUser.formattedAddress || currentUser.location || 'Not Specified'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1">
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                    <CheckCircle className="fill-emerald-500 text-white border-transparent" size={14} /> Verified Location
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsLocationModalOpen(true)}
+                    className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer transition-colors"
+                  >
+                    Change Location
+                  </button>
                 </div>
               </div>
 
@@ -2330,6 +2386,13 @@ const EmployerDashboard = () => {
           </p>
         </div>
       </Modal>
+      {isLocationModalOpen && (
+        <LocationAutocompleteModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          onSelect={handleLocationSelect}
+        />
+      )}
     </div>
   );
 };

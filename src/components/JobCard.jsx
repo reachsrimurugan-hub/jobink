@@ -109,7 +109,7 @@ const JobCard = ({
       case 'booked':
       case 'ACCEPTED':
         return (
-          <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+          <span className="bg-rebeccapurple-50 text-rebeccapurple-700 border border-rebeccapurple-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
             Accepted
           </span>
         );
@@ -127,7 +127,7 @@ const JobCard = ({
         );
       case 'EMPLOYER_MARKED_PAID':
         return (
-          <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
+          <span className="bg-rebeccapurple-50 text-rebeccapurple-700 border border-rebeccapurple-200 text-[10px] font-bold px-2 py-0.5 rounded-md">
             Employer Paid
           </span>
         );
@@ -188,6 +188,9 @@ const JobCard = ({
   // Split location by comma
   const locationParts = location ? location.split(',') : ['', ''];
   const areaPart = locationParts[1] ? locationParts[1].trim() : '';
+  const displayLocation = (job.locality && job.city) 
+    ? `${job.locality}, ${job.city}`
+    : location;
 
   // Split working hours by comma to extract duration sub-text
   const timeParts = workingHours ? workingHours.split(',') : ['', ''];
@@ -285,13 +288,13 @@ const JobCard = ({
         <div className="flex flex-col gap-3 border-t border-slate-100 mt-4 pt-4">
           {/* Location with description beneath */}
           <div className="flex items-start gap-2.5 w-full">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 mt-0.5">
+            <div className="w-8 h-8 rounded-lg bg-rebeccapurple-50 text-rebeccapurple-600 flex items-center justify-center shrink-0 mt-0.5">
               <MapPin className="w-4 h-4" />
             </div>
             <div className="text-left min-w-0 flex-1">
-              <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{areaPart || t('location')}</div>
-              <div className={`font-bold text-slate-800 leading-normal flex flex-wrap items-center gap-1.5 ${valueClass}`} title={location}>
-                <span>{location}</span>
+              <div className={`text-slate-400 font-bold uppercase leading-none mb-1 ${labelClass}`}>{job.locality || areaPart || t('location')}</div>
+              <div className={`font-bold text-slate-800 leading-normal flex flex-wrap items-center gap-1.5 ${valueClass}`} title={displayLocation}>
+                <span>{displayLocation}</span>
                 {distance !== null && (
                   <span className="text-[11px] font-extrabold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md shrink-0">
                     {formattedDistance}
@@ -306,7 +309,7 @@ const JobCard = ({
 
           {/* Duration */}
           <div className="flex items-center gap-2.5 w-full">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-rebeccapurple-50 text-rebeccapurple-600 flex items-center justify-center shrink-0">
               <Clock className="w-4 h-4" />
             </div>
             <div className="text-left min-w-0 flex-1">
@@ -318,7 +321,7 @@ const JobCard = ({
           {/* Applicants (Employer Only) */}
           {userRole === 'employer' && (
             <div className="flex items-center gap-2.5 w-full">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-rebeccapurple-50 text-rebeccapurple-600 flex items-center justify-center shrink-0">
                 <Users className="w-4 h-4" />
               </div>
               <div className="text-left min-w-0 flex-1">
@@ -334,10 +337,33 @@ const JobCard = ({
         {/* Collapsible Details: Revealed when isExpanded is true */}
         {isExpanded && (
           <div className="space-y-4 border-t border-slate-100 pt-4 mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            {/* Work Location Details */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3.5 text-left shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-rebeccapurple-100 text-rebeccapurple-700 flex items-center justify-center shrink-0 shadow-sm border border-rebeccapurple-200/50">
+                <MapPin className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] uppercase font-bold text-slate-450 block tracking-wide mb-1">
+                  Work Location
+                </span>
+                <strong className="text-slate-800 text-sm block leading-snug">
+                  {job.locality || areaPart || 'Area'}, {job.city || 'City'}
+                </strong>
+                {job.state && (
+                  <span className="text-[11px] text-slate-500 font-semibold block mt-0.5">
+                    {job.state}
+                  </span>
+                )}
+                <p className="text-[11px] text-slate-450 font-medium block mt-1 leading-normal">
+                  {job.formattedAddress || location}
+                </p>
+              </div>
+            </div>
+
             {/* Payment Card */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-4 text-left">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-rebeccapurple-100 text-rebeccapurple-700 flex items-center justify-center shrink-0 shadow-sm">
                   <IndianRupee className="w-5 h-5" />
                 </div>
                 <div>
@@ -356,7 +382,7 @@ const JobCard = ({
                     status === 'COMPLETED' || status === 'completed'
                       ? 'bg-green-50 text-green-700 border-green-200'
                       : status === 'EMPLOYER_MARKED_PAID'
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                        ? 'bg-rebeccapurple-50 text-rebeccapurple-700 border-rebeccapurple-200'
                         : status === 'DISPUTED'
                           ? 'bg-red-50 text-red-700 border-red-250'
                           : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -414,7 +440,7 @@ const JobCard = ({
                       Paid & Verified
                     </span>
                   ) : status === 'EMPLOYER_MARKED_PAID' ? (
-                    <span className="bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
+                    <span className="bg-rebeccapurple-100 text-rebeccapurple-800 border border-rebeccapurple-200 text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase">
                       Awaiting Worker Verify
                     </span>
                   ) : status === 'DISPUTED' ? (

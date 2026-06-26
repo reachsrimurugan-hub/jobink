@@ -1,8 +1,0 @@
-1. Employer posts a job.
-2. Workers apply for the job.
-3. Employer selects the required worker.
-4. The selected worker receives an in-app notification.
-5. The worker can contact the employer through WhatsApp or a phone call.
-6. worker completes the assigned work.
-7. The employer pays the worker through UPI.
-8. Both users provide ratings and reviews to build trust on the platform.

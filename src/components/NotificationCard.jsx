@@ -30,7 +30,7 @@ const NotificationCard = ({ notification, onMarkRead }) => {
 
   return (
     <div className={`p-4 border border-slate-200 rounded-xl transition-all ${
-      read ? 'bg-white' : 'bg-blue-50/50 border-blue-100 shadow-sm'
+      read ? 'bg-white' : 'bg-rebeccapurple-50/50 border-rebeccapurple-100 shadow-sm'
     } flex items-start justify-between gap-3 text-left`}>
       
       <div className="flex gap-3">

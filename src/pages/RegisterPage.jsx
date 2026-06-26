@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { CITIES, LOCATIONS, ALL_SKILLS } from '../utils/locations';
-import { ShieldCheck, UserCheck, Briefcase, Upload, Camera } from 'lucide-react';
+import { ALL_SKILLS } from '../utils/locations';
+import { ShieldCheck, UserCheck, Briefcase, Upload, Camera, MapPin, Loader2, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { authService } from '../services/db';
+import { reverseGeocode } from '../services/geoapify';
+import LocationAutocompleteModal from '../components/LocationAutocompleteModal';
 
 // Client-side image compression helper using HTML5 Canvas
 const compressImage = (base64Str, maxWidth = 800, maxHeight = 800) => {
@@ -49,11 +51,23 @@ const RegisterPage = () => {
   const [step, setStep] = useState(1);
   const { t, i18n } = useTranslation();
   
-  // Registration States
   const [role, setRole] = useState('');
   const [name, setName] = useState(currentUser?.name || '');
+  
+  // Geolocation and Geoapify States
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [formattedAddress, setFormattedAddress] = useState('');
+  const [locality, setLocality] = useState('');
   const [city, setCity] = useState('');
-  const [area, setArea] = useState('');
+  const [district, setDistrict] = useState('');
+  const [state, setState] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [country, setCountry] = useState('');
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
   const [businessType, setBusinessType] = useState('Individual'); // For employers
   const [skills, setSkills] = useState([]); // For workers
   const availability = true; // For workers
@@ -73,6 +87,69 @@ const RegisterPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const requestDeviceLocation = () => {
+    setLocationLoading(true);
+    setLocationError('');
+    if (!navigator.geolocation) {
+      setLocationError('Your browser does not support geolocation.');
+      setLocationLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const result = await reverseGeocode(latitude, longitude);
+          if (result) {
+            setLatitude(result.latitude);
+            setLongitude(result.longitude);
+            setFormattedAddress(result.formattedAddress);
+            setLocality(result.locality);
+            setCity(result.city);
+            setDistrict(result.district);
+            setState(result.state);
+            setPostalCode(result.postalCode);
+            setCountry(result.country);
+            setLocationError('');
+          } else {
+            setLocationError('Failed to geocode your coordinates.');
+          }
+        } catch (err) {
+          console.error(err);
+          setLocationError('Failed to retrieve location details.');
+        } finally {
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setLocationError('Location access is required to automatically detect your location.');
+        setLocationLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  useEffect(() => {
+    if (step === 2) {
+      requestDeviceLocation();
+    }
+  }, [step]);
+
+  const handleLocationSelect = (loc) => {
+    setLatitude(loc.latitude);
+    setLongitude(loc.longitude);
+    setFormattedAddress(loc.formattedAddress);
+    setLocality(loc.locality);
+    setCity(loc.city);
+    setDistrict(loc.district);
+    setState(loc.state);
+    setPostalCode(loc.postalCode);
+    setCountry(loc.country);
+    setLocationError('');
+  };
 
   // Handle phone verification Send OTP
   const handleSendPhoneOtp = async () => {
@@ -159,8 +236,8 @@ const RegisterPage = () => {
         return;
       }
     }
-    if (!city || !area) {
-      setError('Please select both city and area.');
+    if (!formattedAddress) {
+      setError('Please select or enable a verified location.');
       return;
     }
     if (role === 'worker' && skills.length === 0) {
@@ -198,9 +275,17 @@ const RegisterPage = () => {
         name,
         role,
         phone: currentUser.phone || `+91${onboardingPhone}`,
-        location: `${city}, ${area}`,
-        city,
-        area,
+        location: formattedAddress || `${locality}, ${city}`,
+        city: city || '',
+        area: locality || city || '',
+        latitude,
+        longitude,
+        formattedAddress,
+        locality,
+        district,
+        state,
+        postalCode,
+        country,
         verificationStatus: 'pending', // Trust verification status is pending
         verified: false,
         phoneVerified: currentUser.phone ? true : phoneVerified,
@@ -426,47 +511,91 @@ const RegisterPage = () => {
               </div>
             )}
 
-            {/* Location (City & Area) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="citySelect" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  {t('city')}
-                </label>
-                <select
-                  id="citySelect"
-                  value={city}
-                  onChange={(e) => {
-                    setCity(e.target.value);
-                    setArea(''); // reset area
-                  }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target cursor-pointer"
-                  required
-                >
-                  <option value="">{t('selectCity')}</option>
-                  {CITIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Location Selection System (Automatic and Autocomplete fallback) */}
+            <div className="flex flex-col gap-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase">
+                {t('location') || 'Location'}
+              </label>
 
-              <div>
-                <label htmlFor="areaSelect" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
-                  {t('areaNeighborhood')}
-                </label>
-                <select
-                  id="areaSelect"
-                  value={area}
-                  onChange={(e) => setArea(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary bg-white text-sm font-semibold text-slate-800 touch-target cursor-pointer"
-                  required
-                  disabled={!city}
-                >
-                  <option value="">{t('selectArea')}</option>
-                  {city && LOCATIONS[city]?.map(a => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-              </div>
+              {locationLoading && (
+                <div className="border border-slate-200 rounded-xl p-6 bg-slate-50 flex flex-col items-center justify-center gap-3 animate-pulse">
+                  <Loader2 className="text-primary animate-spin" size={24} />
+                  <span className="text-xs font-semibold text-slate-500">Detecting your location...</span>
+                </div>
+              )}
+
+              {!locationLoading && locationError && (
+                <div className="border border-red-100 bg-red-50 rounded-xl p-5 flex flex-col gap-3.5 text-center">
+                  <span className="text-xs font-semibold text-red-700">{locationError}</span>
+                  <div className="flex gap-3 max-w-sm mx-auto w-full justify-center">
+                    <button
+                      type="button"
+                      onClick={requestDeviceLocation}
+                      className="bg-white border border-red-200 text-red-700 font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm hover:bg-red-100/50 transition-all cursor-pointer flex-1"
+                    >
+                      Enable Location
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="bg-red-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm hover:bg-red-700 transition-all cursor-pointer flex-1"
+                    >
+                      Choose Location
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!locationLoading && !locationError && formattedAddress && (
+                <div className="border border-slate-200 rounded-xl p-5 bg-white flex flex-col gap-3 shadow-sm border-l-4 border-l-emerald-500">
+                  <div className="flex items-start gap-3 text-left">
+                    <MapPin className="text-emerald-500 shrink-0 mt-0.5" size={18} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Current Location</span>
+                      <strong className="text-xs font-bold text-slate-800 block mt-0.5 leading-snug">
+                        {locality || city || 'Verified Area'}
+                      </strong>
+                      <span className="text-[10px] text-slate-500 font-medium block mt-0.5 leading-normal">
+                        {formattedAddress}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1">
+                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle size={14} className="fill-emerald-500 text-white" /> Verified Location
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer transition-colors"
+                    >
+                      Change Location
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!locationLoading && !locationError && !formattedAddress && (
+                <div className="border border-slate-200 rounded-xl p-6 bg-slate-50 flex flex-col items-center justify-center gap-4 text-center">
+                  <span className="text-xs font-medium text-slate-500">We need your location to show jobs near you.</span>
+                  <div className="flex gap-3 max-w-sm mx-auto w-full justify-center">
+                    <button
+                      type="button"
+                      onClick={requestDeviceLocation}
+                      className="bg-primary hover:bg-primary-dark text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm transition-all cursor-pointer flex-1"
+                    >
+                      Enable Location
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationModalOpen(true)}
+                      className="bg-white border border-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm hover:bg-slate-50 transition-all cursor-pointer flex-1"
+                    >
+                      Choose Location
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Worker Only: Skills Selection */}
@@ -653,6 +782,13 @@ const RegisterPage = () => {
               </button>
             </div>
           </form>
+        )}
+        {isLocationModalOpen && (
+          <LocationAutocompleteModal
+            isOpen={isLocationModalOpen}
+            onClose={() => setIsLocationModalOpen(false)}
+            onSelect={handleLocationSelect}
+          />
         )}
       </div>
     </div>
