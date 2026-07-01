@@ -992,64 +992,58 @@ export const jobService = {
     return true;
   },
 
-  // Mark job as paid (Employer action)
-  markJobAsPaid: async (jobId, paymentAmount) => {
-    const amountNum = Number(paymentAmount);
-    return executeTransition('markJobAsPaid', { jobId, paymentAmount: amountNum }, async () => {
+  // Mark job completed by worker
+  markJobCompletedByWorker: async (jobId) => {
+    return executeTransition('markJobCompletedByWorker', { jobId }, async () => {
       const jobRef = doc(db, 'jobs', jobId);
       const jobSnap = await getDoc(jobRef);
       if (!jobSnap.exists()) throw new Error("Job not found");
       const job = jobSnap.data();
 
       await updateDoc(jobRef, { 
-        status: 'EMPLOYER_MARKED_PAID',
-        paymentStatus: 'awaiting_worker_confirmation',
-        paymentAmount: amountNum,
-        paidAt: new Date().toISOString(),
+        status: 'WORK_COMPLETED',
+        workerCompletionConfirmed: true,
+        workerConfirmedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
 
       // Activity log
       const logRef = collection(db, 'jobs', jobId, 'activityLogs');
       await addDoc(logRef, {
-        action: 'EMPLOYER_MARKED_PAID',
-        actorId: auth.currentUser?.uid || job.employerId,
-        details: `Employer marked paid. Amount: ₹${amountNum}. Awaiting worker confirmation.`,
+        action: 'WORK_COMPLETED',
+        actorId: auth.currentUser?.uid || job.workerId || (job.selectedWorkers && job.selectedWorkers[0]),
+        details: `Worker marked job completed. Awaiting employer confirmation.`,
         timestamp: new Date().toISOString()
       });
 
-      // Notify worker
-      const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
-      if (targetWorker) {
-        await notificationService.addNotification(
-          targetWorker,
-          "Payment Sent",
-          `Employer marked payment for "${job.title}" as paid. Please confirm receipt.`
-        );
-      }
+      // Notify employer
+      await notificationService.addNotification(
+        job.employerId,
+        "Worker Marked Job Completed",
+        `Worker has marked your job "${job.title}" as completed. Please confirm completion.`
+      );
 
-      return { success: true, status: 'EMPLOYER_MARKED_PAID' };
+      return { success: true, status: 'WORK_COMPLETED' };
     });
   },
 
-  // Confirm payment received or dispute (Worker action)
-  confirmPayment: async (jobId, received, reason = "", comment = "") => {
-    return executeTransition('confirmPayment', { jobId, received, reason, comment }, async () => {
+  // Confirm job completion by employer
+  confirmJobCompletionByEmployer: async (jobId) => {
+    return executeTransition('confirmJobCompletionByEmployer', { jobId }, async () => {
       const jobRef = doc(db, 'jobs', jobId);
       const jobSnap = await getDoc(jobRef);
       if (!jobSnap.exists()) throw new Error("Job not found");
       const job = jobSnap.data();
-      const workerId = auth.currentUser?.uid || job.workerId;
+      const workerId = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
 
-      if (received) {
-        // Payment Confirmed Received (COMPLETED)
-        await updateDoc(jobRef, {
-          status: 'COMPLETED',
-          paymentStatus: 'confirmed',
-          workerConfirmedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
+      await updateDoc(jobRef, {
+        status: 'COMPLETED',
+        employerCompletionConfirmed: true,
+        employerConfirmedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
 
+      if (workerId) {
         // Update completed jobs & completedJobHistory
         const employerRef = doc(db, 'users', job.employerId);
         const workerRef = doc(db, 'users', workerId);
@@ -1074,179 +1068,131 @@ export const jobService = {
         await recalculateUserTrustAndVerification(job.employerId);
         await recalculateUserTrustAndVerification(workerId);
 
-        // Activity log
-        const logRef = collection(db, 'jobs', jobId, 'activityLogs');
-        await addDoc(logRef, {
-          action: 'COMPLETED',
-          actorId: workerId,
-          details: 'Worker confirmed payment received. Job closed successfully.',
-          timestamp: new Date().toISOString()
-        });
-
-        // Notify employer
+        // Notify worker
         await notificationService.addNotification(
-          job.employerId,
-          "Job Completed Successfully",
-          `Worker confirmed payment for "${job.title}". Job completed!`
+          workerId,
+          "Employer Confirmed Completion",
+          `Employer confirmed completion of "${job.title}". Job completed successfully!`
         );
-
-        return { success: true, status: 'COMPLETED' };
-      } else {
-        // Payment Not Received (DISPUTED)
-        await updateDoc(jobRef, {
-          status: 'DISPUTED',
-          paymentStatus: 'disputed',
-          updatedAt: new Date().toISOString()
-        });
-
-        // Create dispute record
-        const disputeId = `${jobId}_dispute`;
-        const disputeRef = doc(db, 'disputes', disputeId);
-        await setDoc(disputeRef, {
-          id: disputeId,
-          jobId,
-          employerId: job.employerId,
-          workerId: workerId,
-          reason,
-          workerComment: comment || "",
-          employerResponse: "",
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        });
-
-        // Increment disputes raised
-        const workerRef = doc(db, 'users', workerId);
-        const employerRef = doc(db, 'users', job.employerId);
-        await updateDoc(workerRef, {
-          disputesRaised: increment(1)
-        });
-        await updateDoc(employerRef, {
-          disputesRaised: increment(1)
-        });
-
-        // Check flagging rules for low ratings/repeated dispute losses
-        await checkAndFlagUser(workerId);
-        await checkAndFlagUser(job.employerId);
-
-        // Activity log
-        const logRef = collection(db, 'jobs', jobId, 'activityLogs');
-        await addDoc(logRef, {
-          action: 'DISPUTED',
-          actorId: workerId,
-          details: `Worker disputed payment. Reason: ${reason}. Comment: ${comment || "none"}`,
-          timestamp: new Date().toISOString()
-        });
-
-        // Notify employer
-        await notificationService.addNotification(
-          job.employerId,
-          "Payment Dispute Raised",
-          `Dispute raised on "${job.title}" by worker. Reason: ${reason}. Please respond with details.`
-        );
-
-        // Notify admin
-        await notificationService.addNotification(
-          'admin',
-          "New Job Dispute Raised",
-          `A dispute has been raised on job "${job.title}" (Job ID: ${jobId}). Reason: ${reason}.`
-        );
-
-        return { success: true, status: 'DISPUTED' };
       }
+
+      // Activity log
+      const logRef = collection(db, 'jobs', jobId, 'activityLogs');
+      await addDoc(logRef, {
+        action: 'COMPLETED',
+        actorId: auth.currentUser?.uid || job.employerId,
+        details: 'Employer confirmed work completed. Job closed successfully.',
+        timestamp: new Date().toISOString()
+      });
+
+      return { success: true, status: 'COMPLETED' };
     });
   },
 
-  checkPendingPaymentConfirmationsSim: async (uid, role) => {
+  // Conflict detection
+  checkWorkerConflict: async (workerId, jobDate, startTime, endTime, currentJobId) => {
     try {
       const q = query(
         collection(db, 'jobs'),
-        where('status', '==', 'EMPLOYER_MARKED_PAID'),
-        where('paymentStatus', '==', 'awaiting_worker_confirmation'),
-        where(role === 'worker' ? 'workerId' : 'employerId', '==', uid)
+        where('selectedWorkers', 'array-contains', workerId)
       );
-      const snap = await getDocs(q);
-      const now = new Date();
-      const fortyEightHoursMs = 48 * 60 * 60 * 1000;
-      const ninetySixHoursMs = 96 * 60 * 60 * 1000;
+      const querySnapshot = await getDocs(q);
+      const workerJobs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      for (const jobDoc of snap.docs) {
-        const job = jobDoc.data();
-        const jobId = jobDoc.id;
-        const paidAtStr = job.paidAt || job.updatedAt;
-        if (!paidAtStr) continue;
-
-        const paidAt = new Date(paidAtStr);
-        const elapsed = now.getTime() - paidAt.getTime();
-
-        if (elapsed >= ninetySixHoursMs) {
-          if (!job.adminReviewRequired) {
-            await updateDoc(doc(db, 'jobs', jobId), {
-              adminReviewRequired: true,
-              updatedAt: now.toISOString()
-            });
-
-            // Activity log
-            await addDoc(collection(db, 'jobs', jobId, 'activityLogs'), {
-              action: 'ESCALATED_TO_ADMIN',
-              actorId: 'system',
-              details: 'Payment confirmation overdue by 96 hours. Escalated to admin review.',
-              timestamp: now.toISOString()
-            });
-
-            // Notify Admin
-            await notificationService.addNotification(
-              'admin',
-              "Payment Confirmation Overdue",
-              `Job "${job.title}" payment confirmation is overdue by 96 hours. Admin review required.`
-            );
-
-            // Notify Employer
-            await notificationService.addNotification(
-              job.employerId,
-              "Job Escalated to Admin",
-              `Your job "${job.title}" has been escalated to admin review because the worker has not confirmed payment in 96 hours.`
-            );
-
-            // Notify Worker
-            const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
-            if (targetWorker) {
-              await notificationService.addNotification(
-                targetWorker,
-                "Payment Confirmation Overdue",
-                `Your payment confirmation for "${job.title}" is overdue by 96 hours. Escalated to admin review.`
-              );
-            }
-          }
-        } else if (elapsed >= fortyEightHoursMs) {
-          if (!job.paymentReminderSent) {
-            await updateDoc(doc(db, 'jobs', jobId), {
-              paymentReminderSent: true,
-              updatedAt: now.toISOString()
-            });
-
-            // Activity log
-            await addDoc(collection(db, 'jobs', jobId, 'activityLogs'), {
-              action: 'PAYMENT_REMINDER_SENT',
-              actorId: 'system',
-              details: '48-hour reminder sent to worker.',
-              timestamp: now.toISOString()
-            });
-
-            // Notify Worker
-            const targetWorker = job.workerId || (job.selectedWorkers && job.selectedWorkers[0]);
-            if (targetWorker) {
-              await notificationService.addNotification(
-                targetWorker,
-                "Action Required: Confirm Payment",
-                `Employer marked job "${job.title}" as paid 48 hours ago. Please confirm receipt or raise a dispute.`
-              );
-            }
-          }
+      const timeToMinutes = (timeStr) => {
+        if (!timeStr) return 0;
+        let hours = 0;
+        let minutes = 0;
+        
+        const ampmMatch = timeStr.match(/(AM|PM)/i);
+        if (ampmMatch) {
+          const timePart = timeStr.replace(/(AM|PM)/i, '').trim();
+          const parts = timePart.split(':').map(Number);
+          hours = parts[0] || 0;
+          minutes = parts[1] || 0;
+          const ampm = ampmMatch[0].toUpperCase();
+          if (ampm === 'PM' && hours < 12) hours += 12;
+          if (ampm === 'AM' && hours === 12) hours = 0;
+        } else {
+          const parts = timeStr.split(':').map(Number);
+          hours = parts[0] || 0;
+          minutes = parts[1] || 0;
         }
-      }
+        return hours * 60 + minutes;
+      };
+
+      const s1 = timeToMinutes(startTime);
+      const e1 = timeToMinutes(endTime);
+
+      const overlapJobs = workerJobs.filter(job => {
+        if (job.id === currentJobId) return false;
+        
+        const activeStatuses = ['ACCEPTED', 'booked', 'WORK_STARTED', 'WORK_COMPLETED', 'AWAITING_EMPLOYER_CONFIRMATION'];
+        if (!activeStatuses.includes(job.status)) return false;
+        if (job.jobDate !== jobDate) return false;
+
+        const s2 = timeToMinutes(job.startTime);
+        const e2 = timeToMinutes(job.endTime);
+
+        return s1 < e2 && s2 < e1;
+      });
+
+      return overlapJobs;
     } catch (e) {
-      console.warn("Error running local payment verification check:", e);
+      console.warn("Failed to check conflict:", e);
+      return [];
     }
+  },
+
+  // Dynamic Derived Status
+  getEffectiveJobStatus: (job) => {
+    if (!job) return 'open';
+    if (job.status === 'open') return 'open';
+    if (job.status === 'ACCEPTED' || job.status === 'booked') {
+      const now = new Date();
+      if (!job.jobDate || !job.startTime) return 'Scheduled';
+      
+      let timeStr = job.startTime;
+      const ampmMatch = timeStr.match(/(AM|PM)/i);
+      let hours = 0;
+      let minutes = 0;
+      if (ampmMatch) {
+        const timePart = timeStr.replace(/(AM|PM)/i, '').trim();
+        const parts = timePart.split(':').map(Number);
+        hours = parts[0] || 0;
+        minutes = parts[1] || 0;
+        const ampm = ampmMatch[0].toUpperCase();
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+      } else {
+        const parts = timeStr.split(':').map(Number);
+        hours = parts[0] || 0;
+        minutes = parts[1] || 0;
+      }
+      
+      const hh = String(hours).padStart(2, '0');
+      const mm = String(minutes).padStart(2, '0');
+      
+      try {
+        const jobStart = new Date(`${job.jobDate}T${hh}:${mm}`);
+        if (isNaN(jobStart.getTime())) return 'Scheduled';
+        if (now < jobStart) {
+          return 'Scheduled';
+        } else {
+          return 'In Progress';
+        }
+      } catch (err) {
+        return 'Scheduled';
+      }
+    }
+    if (job.status === 'WORK_STARTED') return 'In Progress';
+    if (job.status === 'WORK_COMPLETED' || job.status === 'AWAITING_EMPLOYER_CONFIRMATION') {
+      return 'Awaiting Employer Confirmation';
+    }
+    if (job.status === 'COMPLETED' || job.status === 'completed') {
+      return 'Completed';
+    }
+    return job.status;
   }
 };
 
@@ -1322,6 +1268,9 @@ export const applicationService = {
           jobPayment: job.payment || '',
           jobPaymentType: job.paymentType || '',
           jobStatus: job.status || 'open',
+          jobDate: job.jobDate || '',
+          startTime: job.startTime || '',
+          endTime: job.endTime || '',
           employerId: job.employerId || '',
           employerName: job.employerName || '',
           employerPhone: job.employerPhone || '',
@@ -1354,11 +1303,11 @@ export const applicationService = {
           const updates = {
             selectedWorkers,
             workersSelectedCount,
-            workerId: workerId,
-            paymentStatus: 'pending'
+            workerId: workerId
           };
           // If total selected reaches workers needed, change status to ACCEPTED
-          if (workersSelectedCount >= (job.workersNeeded || 1)) {
+          const willBeAccepted = workersSelectedCount >= (job.workersNeeded || 1);
+          if (willBeAccepted) {
             updates.status = 'ACCEPTED';
           }
           await updateDoc(jobRef, updates);
@@ -1369,6 +1318,14 @@ export const applicationService = {
             "Selected for Job!",
             `Congratulations! You have been selected for the job "${job.title}" by ${job.employerName}.`
           );
+
+          if (willBeAccepted) {
+            await notificationService.addNotification(
+              workerId,
+              "Job Scheduled",
+              `Job "${job.title}" is scheduled for ${job.jobDate || ''} at ${job.startTime || ''}.`
+            );
+          }
         }
       } else if (status === 'rejected') {
         selectedWorkers = selectedWorkers.filter(id => id !== workerId);
@@ -1591,172 +1548,8 @@ export const queryService = {
 
 // --- DISPUTES SERVICE ---
 export const disputeService = {
-  // Get dispute details by ID
-  getDisputeById: async (disputeId) => {
-    const docSnap = await getDoc(doc(db, 'disputes', disputeId));
-    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
-  },
-
-  // Get all pending disputes for Admin Dashboard
-  getPendingDisputes: async () => {
-    const q = query(
-      collection(db, 'disputes'),
-      where('status', '==', 'pending')
-    );
-    const querySnapshot = await getDocs(q);
-    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  },
-
-  // Employer response to dispute
-  submitEmployerResponse: async (disputeId, responseExplanation) => {
-    return executeTransition('submitEmployerDisputeResponse', { disputeId, employerResponse: responseExplanation }, async () => {
-      const disputeRef = doc(db, 'disputes', disputeId);
-      const disputeSnap = await getDoc(disputeRef);
-      if (!disputeSnap.exists()) throw new Error("Dispute not found");
-      const dispute = disputeSnap.data();
-
-      await updateDoc(disputeRef, {
-        employerResponse: responseExplanation.trim(),
-        updatedAt: new Date().toISOString()
-      });
-
-      // Write activity log on job
-      const logRef = collection(db, 'jobs', dispute.jobId, 'activityLogs');
-      await addDoc(logRef, {
-        action: 'DISPUTE_EMPLOYER_RESPONDED',
-        actorId: auth.currentUser?.uid || dispute.employerId,
-        details: `Employer responded to dispute: "${responseExplanation}"`,
-        timestamp: new Date().toISOString()
-      });
-
-      // Notify admin
-      await notificationService.addNotification(
-        'admin',
-        "Employer Responded to Dispute",
-        `Employer has responded to dispute ${disputeId}.`
-      );
-
-      return { success: true };
-    });
-  },
-
-  // Admin resolves dispute (favor_worker, favor_employer, close)
-  resolveDispute: async (disputeId, resolution) => {
-    return executeTransition('resolveDispute', { disputeId, resolution }, async () => {
-      const disputeRef = doc(db, 'disputes', disputeId);
-      const disputeSnap = await getDoc(disputeRef);
-      if (!disputeSnap.exists()) throw new Error("Dispute not found");
-      const dispute = disputeSnap.data();
-
-      const jobRef = doc(db, 'jobs', dispute.jobId);
-      const jobSnap = await getDoc(jobRef);
-      if (!jobSnap.exists()) throw new Error("Associated job not found");
-      const job = jobSnap.data();
-
-      // Update dispute record
-      await updateDoc(disputeRef, {
-        status: 'resolved',
-        resolvedAt: new Date().toISOString(),
-        resolvedBy: auth.currentUser?.uid || 'admin',
-        resolution: resolution,
-        updatedAt: new Date().toISOString()
-      });
-
-      // Update job status to COMPLETED
-      await updateDoc(jobRef, {
-        status: 'COMPLETED',
-        updatedAt: new Date().toISOString()
-      });
-
-      const employerRef = doc(db, 'users', dispute.employerId);
-      const workerRef = doc(db, 'users', dispute.workerId);
-
-      let disputesLostChange = 0;
-      let completedJobsChange = 0;
-
-      const historyItem = {
-        jobId: dispute.jobId,
-        title: job.title,
-        completedAt: new Date().toISOString()
-      };
-
-      if (resolution === 'favor_worker') {
-        completedJobsChange = 1;
-
-        await updateDoc(employerRef, {
-          completedJobs: increment(completedJobsChange),
-          completedJobHistory: arrayUnion(historyItem)
-        });
-        await updateDoc(workerRef, {
-          completedJobs: increment(completedJobsChange),
-          completedJobHistory: arrayUnion(historyItem)
-        });
-
-        await notificationService.addNotification(
-          dispute.workerId,
-          "Dispute Resolved In Your Favor",
-          `Admin resolved payment dispute for "${job.title}" in your favor.`
-        );
-        await notificationService.addNotification(
-          dispute.employerId,
-          "Dispute Resolved Against You",
-          `Admin resolved payment dispute for "${job.title}" in favor of worker. Your trust score is reduced.`
-        );
-      } else if (resolution === 'favor_employer') {
-        completedJobsChange = 1;
-        disputesLostChange = 1;
-
-        await updateDoc(employerRef, {
-          completedJobs: increment(completedJobsChange),
-          completedJobHistory: arrayUnion(historyItem)
-        });
-        await updateDoc(workerRef, {
-          disputesLost: increment(disputesLostChange)
-        });
-
-        await notificationService.addNotification(
-          dispute.workerId,
-          "Dispute Resolved Against You",
-          `Admin resolved payment dispute for "${job.title}" in favor of employer. Your trust score is reduced.`
-        );
-        await notificationService.addNotification(
-          dispute.employerId,
-          "Dispute Resolved In Your Favor",
-          `Admin resolved payment dispute for "${job.title}" in your favor.`
-        );
-      } else {
-        // close (neutral)
-        await notificationService.addNotification(
-          dispute.workerId,
-          "Dispute Closed",
-          `Admin has closed the dispute for "${job.title}" without penalty.`
-        );
-        await notificationService.addNotification(
-          dispute.employerId,
-          "Dispute Closed",
-          `Admin has closed the dispute for "${job.title}" without penalty.`
-        );
-      }
-
-      // Check flagging rules for disputes
-      await checkAndFlagUser(dispute.workerId);
-      await checkAndFlagUser(dispute.employerId);
-
-      // Recalculate trust scores dynamically
-      await recalculateUserTrustAndVerification(dispute.employerId);
-      await recalculateUserTrustAndVerification(dispute.workerId);
-
-      // Write activity log on job
-      const logRef = collection(db, 'jobs', dispute.jobId, 'activityLogs');
-      await addDoc(logRef, {
-        action: 'DISPUTE_RESOLVED',
-        actorId: auth.currentUser?.uid || 'admin',
-        details: `Admin resolved dispute. Resolution: ${resolution}.`,
-        timestamp: new Date().toISOString()
-      });
-
-      return { success: true };
-    });
-  }
+  getDisputeById: async () => null,
+  getPendingDisputes: async () => [],
+  submitEmployerResponse: async () => ({ success: true }),
+  resolveDispute: async () => ({ success: true })
 };

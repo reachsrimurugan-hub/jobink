@@ -102,6 +102,7 @@ export const AuthProvider = ({ children }) => {
       setConfirmationResult(null);
       setPhoneNumberAttempt('');
       localStorage.setItem('jobink_loggedIn', 'false');
+      sessionStorage.clear();
     } catch (error) {
       throw error;
     }

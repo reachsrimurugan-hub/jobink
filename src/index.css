@@ -9,6 +9,19 @@
     padding: 0;
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
+    
+    /* Disable default pull-to-refresh and overflow bounce for a cleaner app feel */
+    overscroll-behavior-y: contain;
+    
+    /* Prevent general UI text selection */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Allow text selection in form elements and readable descriptions */
+  input, select, textarea, [contenteditable="true"], .selectable-text {
+    user-select: text !important;
+    -webkit-user-select: text !important;
   }
 
   /* WhatsApp/Google Forms-like clean aesthetic resets */
@@ -17,13 +30,28 @@
   }
 }
 
+/* Global scroll prevention and touch improvements */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+  height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 /* Spinner Loader */
 .spinner {
   border: 3px solid rgba(143, 59, 246, 0.1);
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border-left-color: #8f3bf6;
+  border-left-color: #8f3bf6; 
   animation: spin 0.8s linear infinite;
 }
 
@@ -50,3 +78,94 @@
   min-height: 48px;
   min-width: 48px;
 }
+
+/* Safe areas helper classes for notched screens */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.mt-safe {
+  margin-top: env(safe-area-inset-top, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* iOS style toggle switch */
+.ios-switch {
+  position: relative;
+  display: inline-block;
+  width: 51px;
+  height: 31px;
+}
+
+.ios-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ios-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #CBD5E1;
+  transition: .3s;
+  border-radius: 34px;
+}
+
+.ios-slider:before {
+  position: absolute;
+  content: "";
+  height: 27px;
+  width: 27px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+input:checked + .ios-slider {
+  background-color: #22C55E;
+}
+
+input:checked + .ios-slider:before {
+  transform: translateX(20px);
+}
+
+/* PWA Banners – instant show, no animation cost */
+.animate-slide-up,
+.animate-slide-down {
+  opacity: 1;
+  transform: none;
+}
+
+/* Top dynamic loader bar */
+.top-loader-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #8f3bf6 0%, #a36bff 50%, #8f3bf6 100%);
+  background-size: 200% 100%;
+  z-index: 9999;
+  animation: loader-slide 1.5s infinite linear;
+}
+
+@keyframes loader-slide {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+

@@ -19,12 +19,12 @@ const Modal = ({ isOpen, onClose, title, children }) => {
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-slate-900/60 transition-opacity" 
+        className="fixed inset-0 bg-slate-900/60" 
         onClick={onClose}
       />
 
       {/* Modal Container */}
-      <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl z-10 max-h-[85vh] flex flex-col transform transition-all duration-300">
+      <div className="relative bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl z-10 max-h-[85vh] flex flex-col">
         
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
@@ -32,7 +32,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
           <button 
             type="button" 
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-50 transition-colors touch-target flex items-center justify-center"
+            className="text-slate-400 rounded-lg p-1.5 touch-target flex items-center justify-center"
             aria-label="Close modal"
           >
             <X size={20} />

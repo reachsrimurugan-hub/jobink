@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authService, jobService, applicationService, notificationService, reviewService, queryService, disputeService } from '../services/db';
+import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
 import Navbar from '../components/Navbar';
 import BottomNav from '../components/BottomNav';
 import JobCard from '../components/JobCard';
@@ -9,7 +9,8 @@ import NotificationCard from '../components/NotificationCard';
 import Modal from '../components/Modal';
 import RatingStars from '../components/RatingStars';
 const ProfileViewModal = lazy(() => import('../components/ProfileViewModal'));
-import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, HelpCircle, FileText, ChevronRight, LogOut, Loader2, CheckCircle } from 'lucide-react';
+import { Plus, Users, MapPin, BadgeCheck, Phone, MessageSquare, Star, Sparkles, CheckCircle2, ShieldAlert, Edit3, PlusCircle, Clipboard, Bell, Search, Filter, Upload, Camera, XCircle, HelpCircle, FileText, ChevronRight, LogOut, Loader2, CheckCircle, Globe, SlidersHorizontal, AlertCircle } from 'lucide-react';
+import ProfileMenuItem from '../components/ProfileMenuItem';
 import { reverseGeocode } from '../services/geoapify';
 import LocationAutocompleteModal from '../components/LocationAutocompleteModal';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +57,14 @@ const EmployerDashboard = () => {
   const { currentUser, updateProfile, reloadProfile, logout, startTransition, endTransition } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(location.state?.defaultTab || 'home');
+  const [activeTab, setActiveTab] = useState(() => {
+    return location.state?.defaultTab || sessionStorage.getItem('employer_active_tab') || 'home';
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem('employer_active_tab', activeTab);
+  }, [activeTab]);
+
   const [myJobs, setMyJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -166,25 +174,7 @@ const EmployerDashboard = () => {
     }
   };
 
-  // Payment Confirmation Modal States
-  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-  const [payJobId, setPayJobId] = useState('');
-  const [payWorkerId, setPayWorkerId] = useState('');
-  const [payJobTitle, setPayJobTitle] = useState('');
-  const [paymentAmountInput, setPaymentAmountInput] = useState('');
-  const [payError, setPayError] = useState('');
-  const [payLoading, setPayLoading] = useState(false);
-  const [payWorkerProfile, setPayWorkerProfile] = useState(null);
-  const [loadingPayWorker, setLoadingPayWorker] = useState(false);
-  const [upiCopied, setUpiCopied] = useState(false);
-
-  // Dispute Response Modal States
-  const [isDisputeResponseOpen, setIsDisputeResponseOpen] = useState(false);
-  const [disputeIdToRespond, setDisputeIdToRespond] = useState('');
-  const [disputeExplanationChoice, setDisputeExplanationChoice] = useState('Payment already completed');
-  const [disputeExplanationComment, setDisputeExplanationComment] = useState('');
-  const [disputeResponseError, setDisputeResponseError] = useState('');
-  const [disputeResponseLoading, setDisputeResponseLoading] = useState(false);
+  // Removed Payment & Dispute states
 
   // Sync profile details state from currentUser
   useEffect(() => {
@@ -276,7 +266,7 @@ const EmployerDashboard = () => {
     try {
       startTransition();
       await logout();
-      navigate('/login');
+      navigate('/login', { replace: true });
       setTimeout(() => {
         endTransition();
       }, 500);
@@ -594,13 +584,41 @@ const EmployerDashboard = () => {
   }, [activeTab]);
 
   // Open applicant list modal
+  const loadApplicantsList = async (jobId) => {
+    const jobSnap = await jobService.getJobById(jobId);
+    const data = await applicationService.getJobApplications(jobId);
+    const enrichedApplicants = await Promise.all(
+      data.map(async (app) => {
+        if (jobSnap && jobSnap.jobDate && jobSnap.startTime && jobSnap.endTime) {
+          const overlapJobs = await jobService.checkWorkerConflict(
+            app.workerId,
+            jobSnap.jobDate,
+            jobSnap.startTime,
+            jobSnap.endTime,
+            jobId
+          );
+          return {
+            ...app,
+            overlapJobs: overlapJobs || []
+          };
+        }
+        return {
+          ...app,
+          overlapJobs: []
+        };
+      })
+    );
+    return enrichedApplicants;
+  };
+
+  // View job applicants
   const handleOpenApplicants = async (jobId) => {
     try {
       setSelectedJobId(jobId);
       setIsApplicantsOpen(true);
       setApplicantsLoading(true);
-      const data = await applicationService.getJobApplications(jobId);
-      setApplicants(data);
+      const enriched = await loadApplicantsList(jobId);
+      setApplicants(enriched);
       setApplicantsLoading(false);
     } catch (err) {
       console.error(err);
@@ -613,9 +631,8 @@ const EmployerDashboard = () => {
     try {
       setApplicantsLoading(true);
       await applicationService.updateApplicationStatus(selectedJobId, workerId, 'selected');
-      // Refresh applicants list and job overview
-      const data = await applicationService.getJobApplications(selectedJobId);
-      setApplicants(data);
+      const enriched = await loadApplicantsList(selectedJobId);
+      setApplicants(enriched);
       await loadEmployerData();
       setApplicantsLoading(false);
     } catch (err) {
@@ -629,8 +646,8 @@ const EmployerDashboard = () => {
     try {
       setApplicantsLoading(true);
       await applicationService.updateApplicationStatus(selectedJobId, workerId, 'rejected');
-      const data = await applicationService.getJobApplications(selectedJobId);
-      setApplicants(data);
+      const enriched = await loadApplicantsList(selectedJobId);
+      setApplicants(enriched);
       await loadEmployerData();
       setApplicantsLoading(false);
     } catch (err) {
@@ -639,11 +656,11 @@ const EmployerDashboard = () => {
     }
   };
 
-  // Job marked completed
-  const handleMarkJobCompleted = async (jobId) => {
+  // Job marked completed (Confirm Completion by Employer)
+  const handleConfirmJobCompletion = async (jobId) => {
     try {
       setLoading(true);
-      await jobService.updateJobStatus(jobId, 'completed');
+      await jobService.confirmJobCompletionByEmployer(jobId);
       await loadEmployerData();
       setLoading(false);
 
@@ -728,75 +745,7 @@ const EmployerDashboard = () => {
     }
   };
 
-  const handleMarkJobPaid = async (jobId, workerId, jobTitle) => {
-    const job = myJobs.find(j => j.id === jobId);
-    setPayJobId(jobId);
-    setPayWorkerId(workerId);
-    setPayJobTitle(jobTitle);
-    setPaymentAmountInput(job ? job.payment : '');
-    setPayError('');
-    setPayWorkerProfile(null);
-    setIsPayModalOpen(true);
-
-    if (workerId) {
-      try {
-        setLoadingPayWorker(true);
-        const profile = await authService.getCurrentUser(workerId);
-        setPayWorkerProfile(profile);
-        setLoadingPayWorker(false);
-      } catch (err) {
-        console.error("Error fetching worker profile for payment modal:", err);
-        setLoadingPayWorker(false);
-      }
-    }
-  };
-
-  const submitPaymentDetails = async (e) => {
-    e.preventDefault();
-    setPayError('');
-    const amountNum = Number(paymentAmountInput);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      setPayError("Payment Amount must be a positive number.");
-      return;
-    }
-    try {
-      setPayLoading(true);
-      await jobService.markJobAsPaid(payJobId, amountNum);
-      await loadEmployerData();
-      setPayLoading(false);
-      setIsPayModalOpen(false);
-    } catch (err) {
-      console.error("Failed to submit payment details:", err);
-      setPayError(err.message || "Failed to submit payment details.");
-      setPayLoading(false);
-    }
-  };
-
-  const handleOpenDisputeResponse = (jobId) => {
-    setDisputeIdToRespond(`${jobId}_dispute`);
-    setDisputeExplanationChoice('Payment already completed');
-    setDisputeExplanationComment('');
-    setDisputeResponseError('');
-    setIsDisputeResponseOpen(true);
-  };
-
-  const submitDisputeResponse = async (e) => {
-    e.preventDefault();
-    setDisputeResponseError('');
-    const explanation = `${disputeExplanationChoice}: ${disputeExplanationComment.trim()}`;
-    try {
-      setDisputeResponseLoading(true);
-      await disputeService.submitEmployerResponse(disputeIdToRespond, explanation);
-      await loadEmployerData();
-      setDisputeResponseLoading(false);
-      setIsDisputeResponseOpen(false);
-      setDisputeExplanationComment('');
-    } catch (err) {
-      console.error("Dispute response failed:", err);
-      setDisputeResponseError(err.message || "Failed to submit explanation.");
-      setDisputeResponseLoading(false);
-    }
-  };
+  // Removed Payment & Dispute handlers
 
   const handleMarkNotifRead = async (id) => {
     try {
@@ -867,71 +816,75 @@ const EmployerDashboard = () => {
             const totalApplications = myJobs.reduce((acc, job) => acc + (job.applicants?.length || 0), 0);
             return (
               <div className="flex flex-col gap-6 text-left">
-                {/* Welcome Back Header */}
-                <div className="text-left">
-                  <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-                    {t('welcomeBackName', { name: currentUser?.name || 'User' })}
-                  </h2>
-                  <p className="text-slate-500 text-xs font-semibold mt-1">
-                    {t('heresWhatHappening')}
-                  </p>
+                {/* Hero Banner */}
+                <div 
+                  className="p-5 rounded-[20px] shadow-sm flex flex-col justify-center h-[160px] overflow-hidden border border-purple-100/50 relative bg-slate-50 mb-2"
+                  style={{
+                    backgroundImage: 'linear-gradient(to right, rgba(250, 248, 255, 0.67), rgba(243, 238, 255, 0)), url("/employer_bg.png")',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center'
+                  }}
+                >
+                  <div className="flex flex-col justify-center min-w-0 z-10">
+                    <span className="text-[12px] font-medium text-slate-500 block mb-1">Good Morning </span>
+                    <h1 className="text-[30px] font-extrabold text-slate-800 leading-tight truncate" title={currentUser?.name}>
+                      {currentUser?.name}
+                    </h1>
+                    <span className="text-[15px] font-semibold text-slate-400 mt-1 block uppercase tracking-wider">
+                      {t('employer')}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Card 1: Active Requirements */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-rebeccapurple-50 flex items-center justify-center text-rebeccapurple-600 shrink-0">
                       <Clipboard size={22} />
                     </div>
                     <div className="flex flex-col text-left">
-                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{t('activeRequirements')}</span>
+                      <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider">{t('activeRequirements')}</span>
                       <span className="text-3xl font-extrabold text-slate-800 mt-1">{activeJobs.length}</span>
-                      <span className="text-[11px] font-bold text-rebeccapurple-600 mt-2">
+                      <span className="text-[12px] font-bold text-rebeccapurple-600 mt-2">
                         {activeJobs.length === 0 ? t('youHaveNoActivePosts') : t('youHaveActiveRequirements', { count: activeJobs.length })}
                       </span>
                     </div>
                   </div>
 
                   {/* Card 2: Completed Jobs */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-green-600 shrink-0">
                       <CheckCircle2 size={22} />
                     </div>
                     <div className="flex flex-col text-left">
-                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{t('completedJobs')}</span>
+                      <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider">{t('completedJobs')}</span>
                       <span className="text-3xl font-extrabold text-slate-800 mt-1">{completedJobs.length}</span>
-                      <span className="text-[11px] font-bold text-green-600 mt-2">
-                        {t('greatJob')}
-                      </span>
+                      <span className="text-[12px] font-bold text-green-600 mt-2">{t('greatJob')}</span>
                     </div>
                   </div>
 
                   {/* Card 3: Applications */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
                       <Users size={22} />
                     </div>
                     <div className="flex flex-col text-left">
-                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{t('applicants')}</span>
+                      <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider">{t('applicants')}</span>
                       <span className="text-3xl font-extrabold text-slate-800 mt-1">{totalApplications}</span>
-                      <span className="text-[11px] font-bold text-amber-600 mt-2">
-                        {t('totalApplications')}
-                      </span>
+                      <span className="text-[12px] font-bold text-amber-600 mt-2">{t('totalApplications')}</span>
                     </div>
                   </div>
 
                   {/* Card 4: Alerts */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:shadow-md transition-shadow">
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
                       <Bell size={22} />
                     </div>
                     <div className="flex flex-col text-left">
-                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{t('alerts')}</span>
+                      <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider">{t('alerts')}</span>
                       <span className="text-3xl font-extrabold text-slate-800 mt-1">{unreadCount}</span>
-                      <span className="text-[11px] font-bold text-purple-600 mt-2">
-                        {t('unreadAlerts')}
-                      </span>
+                      <span className="text-[12px] font-bold text-purple-600 mt-2">{t('unreadAlerts')}</span>
                     </div>
                   </div>
                 </div>
@@ -968,13 +921,13 @@ const EmployerDashboard = () => {
                   {/* Column 1: Current Open Posts */}
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center px-1">
-                      <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+                      <h3 className="font-extrabold text-slate-800 text-[17px]">
                         {t('currentOpenPosts')}
                       </h3>
                       <button
                         type="button"
                         onClick={() => setActiveTab('jobs')}
-                        className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer flex items-center gap-1"
+                        className="text-sm font-bold text-primary cursor-pointer flex items-center gap-1"
                       >
                         {t('viewAll')}
                       </button>
@@ -993,10 +946,8 @@ const EmployerDashboard = () => {
                               userRole="employer"
                               hideProgress={true}
                               onViewApplicants={handleOpenApplicants}
-                              onMarkCompleted={handleMarkJobCompleted}
+                              onConfirmCompletion={handleConfirmJobCompletion}
                               onDelete={handleDeleteJob}
-                              onMarkPaid={handleMarkJobPaid}
-                              onRespondToDispute={handleOpenDisputeResponse}
                             />
                           ))}
                         </div>
@@ -1007,7 +958,7 @@ const EmployerDashboard = () => {
                   {/* Column 2: Recent Activity */}
                   <div className="flex flex-col gap-3">
                     <div className="flex justify-between items-center px-1">
-                      <h3 className="font-bold text-slate-700 text-xs uppercase tracking-wider">
+                      <h3 className="font-extrabold text-slate-800 text-[17px]">
                         {t('recentActivity')}
                       </h3>
                     </div>
@@ -1026,8 +977,8 @@ const EmployerDashboard = () => {
                                   <Bell size={14} />
                                 </div>
                                 <div className="flex-1">
-                                  <h5 className={`text-slate-800 text-xs ${isUnread ? 'font-bold' : 'font-medium'}`}>{notif.title}</h5>
-                                  <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">{notif.message}</p>
+                                  <h5 className={`text-slate-800 text-[14px] ${isUnread ? 'font-bold' : 'font-semibold'}`}>{notif.title}</h5>
+                                  <p className="text-[12px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed font-medium">{notif.message}</p>
                                   <span className="text-[9px] text-slate-400 font-semibold block mt-1">
                                     {(() => {
                                       try {
@@ -1083,8 +1034,8 @@ const EmployerDashboard = () => {
                 <div className="flex flex-col gap-6">
                   {/* Search and Filter Row */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <h2 className="text-lg font-bold text-slate-800 tracking-tight">
-                      {t('allJobPosts')} ({filteredJobs.length})
+                    <h2 className="text-[22px] font-extrabold text-slate-800 tracking-tight">
+                      {t('allJobPosts')} <span className="text-[16px] font-bold text-slate-400">({filteredJobs.length})</span>
                     </h2>
                     
                     <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
@@ -1096,7 +1047,7 @@ const EmployerDashboard = () => {
                           placeholder="Search posts..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:border-primary focus:ring-1 focus:ring-primary/20 bg-white shadow-sm transition-all"
+                          className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:border-primary focus:ring-1 focus:ring-primary/20 bg-white shadow-sm"
                         />
                       </div>
                       
@@ -1119,10 +1070,7 @@ const EmployerDashboard = () => {
                               { value: 'all', label: 'All Statuses' },
                               { value: 'open', label: 'Open' },
                               { value: 'ACCEPTED', label: 'Accepted' },
-                              { value: 'WORK_STARTED', label: 'Work Started' },
-                              { value: 'WORK_COMPLETED', label: 'Work Completed' },
-                              { value: 'EMPLOYER_MARKED_PAID', label: 'Marked Paid' },
-                              { value: 'DISPUTED', label: 'Disputed' },
+                              { value: 'WORK_COMPLETED', label: 'Awaiting Confirmation' },
                               { value: 'COMPLETED', label: 'Completed' }
                             ].map((opt) => (
                               <button
@@ -1169,10 +1117,8 @@ const EmployerDashboard = () => {
                           job={job}
                           userRole="employer"
                           onViewApplicants={handleOpenApplicants}
-                          onMarkCompleted={handleMarkJobCompleted}
+                          onConfirmCompletion={handleConfirmJobCompletion}
                           onDelete={handleDeleteJob}
-                          onMarkPaid={handleMarkJobPaid}
-                          onRespondToDispute={handleOpenDisputeResponse}
                         />
                       ))}
                     </div>
@@ -1186,14 +1132,14 @@ const EmployerDashboard = () => {
           {activeTab === 'notifications' && (
             <div className="flex flex-col gap-4 text-left">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                  {t('inAppAlerts')} ({notifications.length})
+                <h2 className="text-[20px] font-extrabold text-slate-800">
+                  {t('inAppAlerts')} <span className="text-[15px] font-bold text-slate-400">({notifications.length})</span>
                 </h2>
                 {unreadCount > 0 && (
                   <button
                     type="button"
                     onClick={handleMarkAllRead}
-                    className="text-xs font-bold text-primary hover:underline touch-target cursor-pointer"
+                    className="text-sm font-bold text-primary touch-target cursor-pointer"
                   >
                     {t('markAllRead')}
                   </button>
@@ -1221,108 +1167,9 @@ const EmployerDashboard = () => {
 
           {/* TAB 4: Employer Profile */}
           {activeTab === 'profile' && (
-            <div className="flex flex-col gap-6 text-left">
-              {currentUser.verificationStatus === 'rejected' && (
-                <div className="bg-red-50/50 border border-red-200 rounded-xl p-5 shadow-sm space-y-4">
-                  <h4 className="font-extrabold text-red-800 text-sm flex items-center gap-1.5">
-                    <ShieldAlert size={18} />
-                    Re-Submit Trust Verification Details
-                  </h4>
-                  <p className="text-slate-650 text-xs leading-relaxed">
-                    Your previous trust verification details were rejected. Please update your UPI ID, capture a new Selfie, upload your UPI QR code and submit for admin re-approval.
-                  </p>
-                  
-                  {reVerifError && (
-                    <div className="bg-red-100 text-red-800 text-xs font-semibold p-2.5 rounded border border-red-200">
-                      {reVerifError}
-                    </div>
-                  )}
-                  {reVerifSuccess && (
-                    <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                      {reVerifSuccess}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleReSubmitVerification} className="grid grid-cols-1 gap-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="reUpiIdInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          UPI ID
-                        </label>
-                        <input
-                          id="reUpiIdInput"
-                          type="text"
-                          placeholder="username@bank"
-                          value={reUpiId}
-                          onChange={(e) => setReUpiId(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                          required
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
-                          Selfie Verification
-                        </label>
-                        <div className="border border-dashed border-slate-300 rounded-xl p-2 flex flex-col items-center justify-center gap-2 bg-white h-24 relative">
-                          {reSelfie ? (
-                            <div className="text-center w-full relative">
-                              <img src={reSelfie} alt="Re-Selfie preview" className="w-10 h-10 rounded-full object-cover mx-auto border border-slate-200" />
-                              <span className="text-[9px] text-green-600 font-semibold block mt-1">✓ Selfie Selected</span>
-                              <button
-                                type="button"
-                                onClick={() => setReSelfie('')}
-                                className="text-[9px] text-red-500 hover:underline font-semibold block mx-auto mt-0.5"
-                              >
-                                Clear
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="w-full h-full flex gap-2">
-                              {/* Option 1: Take Selfie */}
-                              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1 border border-slate-100 hover:border-primary bg-slate-50 hover:bg-slate-100 rounded-lg text-center transition-all p-1">
-                                <Camera size={16} className="text-primary" />
-                                <span className="text-[10px] font-bold text-slate-700">Take Selfie</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="user"
-                                  onChange={(e) => handleFileChange(e, setReSelfie)}
-                                  className="hidden"
-                                  required={!reSelfie}
-                                />
-                              </label>
-                              {/* Option 2: Upload Photo */}
-                              <label className="flex-1 cursor-pointer flex flex-col items-center justify-center gap-1 border border-slate-100 hover:border-primary bg-slate-50 hover:bg-slate-100 rounded-lg text-center transition-all p-1">
-                                <Upload size={16} className="text-slate-500" />
-                                <span className="text-[10px] font-bold text-slate-700">Upload Photo</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => handleFileChange(e, setReSelfie)}
-                                  className="hidden"
-                                  required={!reSelfie}
-                                />
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={reVerifLoading}
-                      className="w-full bg-red-600 hover:bg-red-750 text-white font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer mt-2"
-                    >
-                      {reVerifLoading ? 'Submitting...' : 'Re-Submit Verification Details'}
-                    </button>
-                  </form>
-                </div>
-              )}
-
+            <div className="flex flex-col gap-6 text-left max-w-xl mx-auto">
               {/* User Bio Card */}
-              <div className="relative bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col items-center text-center gap-4">
+              <div className="relative bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col items-center text-center gap-4">
                 {/* Edit Profile button at top-right */}
                 <button
                   type="button"
@@ -1340,7 +1187,7 @@ const EmployerDashboard = () => {
                 <img 
                   src={currentUser.profilePhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
                   alt={currentUser.name || t('employer')} 
-                  className="w-20 h-20 rounded-full object-cover border border-slate-200"
+                  className="w-20 h-20 rounded-full object-cover border border-slate-200 shadow-sm"
                 />
 
                 {/* User Details Below Profile Photo */}
@@ -1349,159 +1196,106 @@ const EmployerDashboard = () => {
                   <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider mt-1.5 block">
                     {currentUser.businessType === 'Business' ? t('shopOwner') : t('householdEmployer')}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{currentUser.phone}</span>
-                  {currentUser.description && (
-                    <p className="text-xs text-slate-655 mt-2 italic font-medium leading-relaxed max-w-md">
-                      "{currentUser.description}"
-                    </p>
-                  )}
-                  <div className="flex items-center justify-center gap-2 mt-2.5">
-                    <RatingStars rating={currentUser.rating} size={15} />
-                    <span className="text-xs text-slate-400 font-medium">{t('reviewsCount', { count: currentUser.ratingCount || 0 })}</span>
+                  
+                  {/* Verified Badges */}
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    {currentUser.selfieVerified || currentUser.verified ? (
+                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-green-200">
+                        <CheckCircle size={10} className="fill-green-600 text-white" /> Phone Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-red-200">
+                        Phone Unverified
+                      </span>
+                    )}
+
+                    {currentUser.upiVerified || currentUser.verified ? (
+                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-green-200">
+                        <CheckCircle size={10} className="fill-green-600 text-white" />
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-red-200">
+                        
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Location Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col gap-3 text-left">
-                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
-                  <MapPin className="text-primary" size={16} />
-                  {t('location') || 'Location'}
-                </h4>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50/70 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-100">
-                    <MapPin size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Current Location</span>
-                    <strong className="text-xs font-bold text-slate-855 block mt-0.5 leading-snug">
-                      {currentUser.locality || currentUser.city || 'Verified Area'}
-                    </strong>
-                    <span className="text-[10px] text-slate-500 font-medium block mt-0.5 leading-normal">
-                      {currentUser.formattedAddress || currentUser.location || 'Not Specified'}
-                    </span>
+              {/* Categorized Navigation List */}
+              <div className="space-y-6">
+                {/* ACCOUNT */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">ACCOUNT</h3>
+                  <div className="flex flex-col gap-3">
+                    <ProfileMenuItem
+                      icon={MapPin}
+                      title="Business Locations"
+                      to="/profile/locations"
+                    />
+                    <ProfileMenuItem
+                      icon={SlidersHorizontal}
+                      title="Company Details"
+                      to="/profile/company-details"
+                    />
+                    <ProfileMenuItem
+                      icon={Globe}
+                      title="Language"
+                      to="/profile/language"
+                    />
                   </div>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1">
-                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                    <CheckCircle className="fill-emerald-500 text-white border-transparent" size={14} /> Verified Location
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsLocationModalOpen(true)}
-                    className="text-xs font-bold text-primary hover:underline hover:text-primary-dark cursor-pointer transition-colors"
-                  >
-                    Change Location
-                  </button>
+
+                {/* SUPPORT */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">SUPPORT</h3>
+                  <div className="flex flex-col gap-3">
+                    <ProfileMenuItem
+                      icon={HelpCircle}
+                      title="Help & Support"
+                      to="/help"
+                    />
+                    <ProfileMenuItem
+                      icon={MessageSquare}
+                      title="Message Admin"
+                      to="/profile/query-admin"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Reviews Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2 mb-3">
-                  Reviews ({reviews.length})
-                </h4>
-
-                {reviews.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">{t('noRatingsSubmitted')}</p>
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    {reviews.map((rev) => (
-                      <div key={rev.id} className="border-b border-slate-50 pb-3 last:border-b-0 last:pb-0 flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <strong className="text-slate-800 text-xs">{rev.reviewerName}</strong>
-                          <RatingStars rating={rev.rating} size={12} />
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-semibold italic">Job: "{rev.jobTitle}"</span>
-                        <p className="text-xs text-slate-600 leading-relaxed font-medium">"{rev.comment}"</p>
-                        <span className="text-[9px] text-slate-400 block mt-1">{new Date(rev.createdAt).toLocaleDateString('en-IN')}</span>
-                      </div>
-                    ))}
+                {/* SECURITY */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">SECURITY</h3>
+                  <div className="flex flex-col gap-3">
+                    <ProfileMenuItem
+                      icon={ShieldAlert}
+                      title="Privacy & Security"
+                      to="/profile/security"
+                    />
                   </div>
-                )}
-              </div>
-
-              {/* Query Admin Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-left flex flex-col gap-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                  <MessageSquare className="text-primary shrink-0" size={18} />
-                  <h3 className="font-extrabold text-slate-800 text-sm"> Query Admin</h3>
                 </div>
-                <p className="text-slate-500 text-xs leading-relaxed">
-                  Need assistance or have query regarding listings? Send a direct message to the admin.
-                </p>
 
-                {queryError && (
-                  <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-                    {queryError}
+                {/* LEGAL */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1">LEGAL</h3>
+                  <div className="flex flex-col gap-3">
+                    <ProfileMenuItem
+                      icon={FileText}
+                      title="Terms & Conditions"
+                      to="/terms"
+                    />
                   </div>
-                )}
-                {querySuccess && (
-                  <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                    {querySuccess}
-                  </div>
-                )}
+                </div>
 
-                <form onSubmit={handleQuerySubmit} className="flex flex-col gap-3.5 text-xs">
-                  <textarea
-                    rows={4}
-                    placeholder="Describe your query or issue here..."
-                    value={queryText}
-                    onChange={(e) => setQueryText(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:border-primary focus:outline-none text-slate-800"
-                    required
-                    disabled={queryLoading}
-                  />
-                  <button
-                    type="submit"
-                    disabled={queryLoading}
-                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer text-center w-full"
-                  >
-                    {queryLoading ? 'Sending...' : 'Send Message'}
-                  </button>
-                </form>
-              </div>
-
-              {/* Support & Settings Card */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
-                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider border-b border-slate-100 pb-2">
-                  Support & Settings
-                </h4>
-                <div className="flex flex-col divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setIsHelpOpen(true)}
-                    className="flex items-center justify-between py-3 hover:text-primary transition-colors cursor-pointer text-left w-full"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <HelpCircle size={16} className="text-slate-400" />
-                      <span>Help & Support</span>
-                    </div>
-                    <ChevronRight size={14} className="text-slate-400" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsTermsOpen(true)}
-                    className="flex items-center justify-between py-3 hover:text-primary transition-colors cursor-pointer text-left w-full"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <FileText size={16} className="text-slate-400" />
-                      <span>Terms & Conditions</span>
-                    </div>
-                    <ChevronRight size={14} className="text-slate-400" />
-                  </button>
-
+                {/* Logout Button */}
+                <div className="pt-4">
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex items-center justify-between py-3 text-red-600 hover:text-red-750 hover:bg-red-50/20 transition-colors cursor-pointer text-left w-full rounded-b-lg"
+                    className="w-full min-h-[56px] text-[#DC2626] border border-[#DC2626] hover:bg-red-50 hover:border-red-600 transition-all font-bold rounded-2xl flex items-center justify-center gap-2 cursor-pointer text-[16px]"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <LogOut size={16} className="text-red-500" />
-                      <span>Logout</span>
-                    </div>
-                    <ChevronRight size={14} className="text-red-400" />
+                    <LogOut size={18} />
+                    Logout
                   </button>
                 </div>
               </div>
@@ -1580,6 +1374,26 @@ const EmployerDashboard = () => {
                         {s}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {/* Conflict Alert Warning */}
+                {app.overlapJobs && app.overlapJobs.length > 0 && (
+                  <div className="bg-red-55 border border-red-200 text-red-700 text-[11px] font-bold p-3 rounded-xl flex flex-col gap-1.5 animate-in fade-in duration-200">
+                    <span className="flex items-center gap-1">
+                      <AlertCircle size={14} className="text-red-500 shrink-0" />
+                      This worker has a schedule conflict:
+                    </span>
+                    <ul className="list-disc list-inside font-medium text-[10px] text-red-650 pl-1">
+                      {app.overlapJobs.map(j => (
+                        <li key={j.id}>
+                          "{j.title}" on {j.jobDate} ({j.startTime}–{j.endTime})
+                        </li>
+                      ))}
+                    </ul>
+                    <span className="text-[10px] text-slate-500 font-normal italic mt-0.5 block">
+                      Employer may still choose another worker.
+                    </span>
                   </div>
                 )}
 
@@ -1703,9 +1517,7 @@ const EmployerDashboard = () => {
             canWriteReview={canReviewWorker}
           />
         </Suspense>
-      )}
-
-      <Modal
+      )}      <Modal
         isOpen={isEditProfileOpen}
         onClose={() => setIsEditProfileOpen(false)}
         title={t('editProfileSettings')}
@@ -1758,28 +1570,6 @@ const EmployerDashboard = () => {
                 />
               </div>
 
-              {/* Mobile Number (if missing) */}
-              {!currentUser.phone && (
-                <div>
-                  <label htmlFor="directPhone" className="block text-[10px] font-bold text-slate-700 mb-1.5 uppercase">
-                    Add Mobile Number (for WhatsApp)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
-                    <input
-                      id="directPhone"
-                      type="tel"
-                      placeholder="Enter 10-digit number"
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
-                      maxLength={10}
-                      className="w-full pl-12 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
               <button
                 type="submit"
                 disabled={profileSaving}
@@ -1788,511 +1578,9 @@ const EmployerDashboard = () => {
                 {profileSaving ? t('savingChanges') : t('saveProfileDetails')}
               </button>
             </form>
-
-            {/* Name Change Request Section */}
-            <div className="border-t border-slate-100 pt-5 flex flex-col gap-3">
-              <h4 className="font-bold text-slate-855 text-xs uppercase tracking-wider">
-                Name Change Request
-              </h4>
-              {nameError && (
-                <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-                  {nameError}
-                </div>
-              )}
-              {nameSuccess && (
-                <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                  {nameSuccess}
-                </div>
-              )}
-
-              {!nameRequest ? (
-                <form onSubmit={handleRequestNameChange} className="flex flex-col gap-3">
-                  <p className="text-slate-500 text-xs leading-relaxed">
-                    Name changes require administrator approval to ensure your account matches your verified identity.
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Enter new full name"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                      required
-                    />
-                    <button
-                      type="submit"
-                      disabled={nameLoading}
-                      className="bg-primary hover:bg-primary-dark text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors cursor-pointer shrink-0"
-                    >
-                      {nameLoading ? 'Submitting...' : 'Request'}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
-                      nameRequest.status === 'pending'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : nameRequest.status === 'approved'
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-red-50 text-red-700 border-red-200'
-                    }`}>
-                      {nameRequest.status}
-                    </span>
-                    <span className="text-xs text-slate-500 font-semibold">Name Update Request</span>
-                  </div>
-
-                  <div className="text-xs text-slate-650">
-                    Requested name change: <strong className="text-slate-800">{nameRequest.newName}</strong>
-                  </div>
-
-                  {nameRequest.status === 'pending' && (
-                    <p className="text-[10px] text-slate-500 italic">
-                      Awaiting administrator approval. You will be notified once reviewed.
-                    </p>
-                  )}
-
-                  {nameRequest.status === 'rejected' && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold">
-                        Reason: {nameRequest.rejectionReason || 'No reason provided.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleResetNameRequest}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-xs transition-colors w-full cursor-pointer"
-                      >
-                        Reapply / Reset Request
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* UPI details Change Request Section */}
-            <div className="border-t border-slate-100 pt-5 flex flex-col gap-3">
-              <h4 className="font-bold text-slate-855 text-xs uppercase tracking-wider">
-                UPI Credentials Request
-              </h4>
-              {upiError && (
-                <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-                  {upiError}
-                </div>
-              )}
-              {upiSuccess && (
-                <div className="bg-green-50 text-green-700 text-xs font-semibold p-2.5 rounded border border-green-100">
-                  {upiSuccess}
-                </div>
-              )}
-
-              {!upiRequest ? (
-                <form onSubmit={handleRequestUpiChange} className="flex flex-col gap-3">
-                  <p className="text-slate-500 text-xs leading-relaxed">
-                    UPI updates require administrator approval. Provide your UPI ID and scan-to-pay QR image.
-                  </p>
-                  <div>
-                    <label htmlFor="newUpiIdInput" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                      New UPI ID (username@bank)
-                    </label>
-                    <input
-                      id="newUpiIdInput"
-                      type="text"
-                      placeholder="username@bank"
-                      value={newUpiId}
-                      onChange={(e) => setNewUpiId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 mb-2"
-                      required
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={upiLoading}
-                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer mt-1"
-                  >
-                    {upiLoading ? 'Submitting...' : 'Submit UPI Update Request'}
-                  </button>
-                </form>
-              ) : (
-                <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
-                      upiRequest.status === 'pending'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : upiRequest.status === 'approved'
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-red-50 text-red-700 border-red-200'
-                    }`}>
-                      {upiRequest.status}
-                    </span>
-                    <span className="text-xs text-slate-500 font-semibold">UPI Update Request</span>
-                  </div>
-
-                  <div className="text-xs text-slate-655 space-y-2">
-                    <div>Requested UPI ID: <strong className="text-slate-800 font-mono">{upiRequest.newUpiId}</strong></div>
-
-                  </div>
-
-                  {upiRequest.status === 'pending' && (
-                    <p className="text-[10px] text-slate-500 italic">
-                      Awaiting administrator approval. You will be notified once reviewed.
-                    </p>
-                  )}
-
-                  {upiRequest.status === 'rejected' && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold">
-                        Reason: {upiRequest.rejectionReason || 'No reason provided.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleResetUpiRequest}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-[10px] transition-colors w-full cursor-pointer"
-                      >
-                        Reapply / Reset Request
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}     </div>
-          </div>
-
-          {/* Update Phone Number Card */}
-          <div className="border-t border-slate-100 pt-5 flex flex-col gap-4">
-            <h4 className="font-bold text-slate-855 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              {t('updateMobileNumber')}
-            </h4>
-            
-            {phoneError && (
-              <div className="bg-red-50 text-red-700 text-xs font-semibold p-3 rounded-lg border border-red-100">
-                {phoneError}
-              </div>
-            )}
-            {phoneSuccess && (
-              <div className="bg-green-50 text-green-700 text-xs font-semibold p-3 rounded-lg border border-green-100">
-                {phoneSuccess}
-              </div>
-            )}
-
-            {/* None state (no active change request) */}
-            {!phoneRequest && (
-              <form onSubmit={handleRequestPhoneChange} className="flex flex-col gap-3">
-                <p className="text-slate-500 text-xs leading-relaxed">
-                  {t('requestPhoneChangeDesc')}
-                </p>
-                <div>
-                  <label htmlFor="newPhoneInput" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">{t('newMobileNumber')}</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">+91</span>
-                    <input
-                      id="newPhoneInput"
-                      type="tel"
-                      placeholder={t('enter10Digit')}
-                      value={newPhone}
-                      onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
-                      maxLength={10}
-                      className="w-full pl-12 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={phoneLoading}
-                  className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
-                >
-                  {phoneLoading ? t('sending') : t('requestUpdateInfo')}
-                </button>
-              </form>
-            )}
-
-            {/* Pending Approval state */}
-            {phoneRequest && phoneRequest.status === 'pending' && (
-              <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold">
-                  <span>{t('requestPendingAdmin')}</span>
-                </div>
-                <p className="text-xs text-slate-655">
-                  {t('requestedUpdateTo')} <strong>{phoneRequest.newPhone}</strong>.
-                </p>
-                <span className="text-[10px] text-slate-400">
-                  {t('submitted')}: {new Date(phoneRequest.createdAt).toLocaleDateString('en-IN')}
-                </span>
-              </div>
-            )}
-
-            {/* Approved state (OTP entry) */}
-            {phoneRequest && phoneRequest.status === 'approved' && (
-              <div className="bg-green-50/50 border border-green-200 p-4 rounded-xl flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 text-xs text-green-700 font-bold">
-                  <span>{t('phoneChangeApproved')}</span>
-                </div>
-                <p className="text-xs text-slate-655">
-                  {t('adminApprovedPhoneChange', { phone: phoneRequest.newPhone })}
-                </p>
-                
-                {!otpSent ? (
-                  <button
-                    type="button"
-                    onClick={handleSendPhoneChangeOTP}
-                    disabled={phoneLoading}
-                    className="bg-primary hover:bg-primary-dark text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
-                  >
-                    {phoneLoading ? t('sending') : t('sendOtpToNew')}
-                  </button>
-                ) : (
-                  <form onSubmit={handleVerifyPhoneChangeOTP} className="flex flex-col gap-3 border-t border-green-100 pt-3">
-                    <div>
-                      <label htmlFor="phoneChangeOtp" className="block text-[10px] font-bold text-slate-700 uppercase mb-1">
-                        {t('sixDigitVerification')}
-                      </label>
-                      <input
-                        id="phoneChangeOtp"
-                        type="text"
-                        placeholder={t('enterOtpCode')}
-                        value={changeOtp}
-                        onChange={(e) => setChangeOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-center font-bold tracking-widest text-slate-800"
-                        maxLength={6}
-                        required
-                      />
-                      <span className="text-[10px] text-slate-450 block mt-1">
-                        {t('testHelperOtp')}
-                      </span>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={phoneLoading}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl text-xs transition-colors w-full cursor-pointer"
-                    >
-                      {phoneLoading ? t('verifying') : t('verifyOtpComplete')}
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-
-            {/* Rejected state */}
-            {phoneRequest && phoneRequest.status === 'rejected' && (
-              <div className="bg-red-50/50 border border-red-200 p-4 rounded-xl flex flex-col gap-2">
-                <div className="flex items-center gap-1.5 text-xs text-red-700 font-bold">
-                  <span>{t('requestRejectedAdmin')}</span>
-                </div>
-                <p className="text-xs text-slate-655">
-                  {t('adminRejectedPhoneChange', { phone: phoneRequest.newPhone })}
-                </p>
-                {phoneRequest.rejectionReason && (
-                  <p className="text-xs text-red-700 bg-red-100/50 p-2 rounded-lg border border-red-100 font-semibold mt-1">
-                    Reason: {phoneRequest.rejectionReason}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleResetPhoneRequest}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 rounded-lg text-xs transition-colors w-full cursor-pointer"
-                >
-                  {t('requestAgain')}
-                </button>
-              </div>
-            )}
           </div>
         </div>
-      </Modal>
-
-      {/* UPI PAYMENT CONFIRMATION MODAL */}
-      <Modal
-        isOpen={isPayModalOpen}
-        onClose={() => {
-          setIsPayModalOpen(false);
-          setPayError('');
-        }}
-        title="Confirm UPI Payment"
-      >
-        <div className="flex flex-col gap-4 text-left">
-          <p className="text-slate-500 text-xs leading-relaxed font-medium">
-            Please transfer the job amount directly to the worker's UPI account. Once completed, click <strong>Confirm Paid</strong> to notify the worker. They will verify receipt to close the job.
-          </p>
-
-          {payError && (
-            <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-              {payError}
-            </div>
-          )}
-
-          {loadingPayWorker ? (
-            <div className="text-slate-400 animate-pulse text-xs font-semibold py-4 text-center">
-              Loading worker UPI details...
-            </div>
-          ) : payWorkerProfile ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3 border-b border-slate-200/50 pb-2.5">
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker</span>
-                  <span className="font-bold text-slate-800 text-sm">{payWorkerProfile.name}</span>
-                </div>
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Phone Number</span>
-                  <span className="font-mono font-bold text-slate-800 text-[11px]">{payWorkerProfile.phone || 'N/A'}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Worker UPI ID</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="font-mono font-bold text-slate-800 text-[11px] break-all">
-                      {payWorkerProfile.upiId || 'Not Provided'}
-                    </span>
-                    {payWorkerProfile.upiId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(payWorkerProfile.upiId);
-                          setUpiCopied(true);
-                          setTimeout(() => setUpiCopied(false), 2000);
-                        }}
-                        className="text-[9px] font-extrabold text-primary hover:text-primary-dark transition-colors focus:outline-none flex items-center gap-0.5 bg-primary/5 hover:bg-primary/10 px-1.5 py-0.5 rounded cursor-pointer"
-                      >
-                        {upiCopied ? 'Copied!' : 'Copy'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          ) : (
-            <div className="text-red-550 text-xs font-semibold py-2 text-center">
-              Failed to load worker details.
-            </div>
-          )}
-
-          <form onSubmit={submitPaymentDetails} className="flex flex-col gap-4 text-xs font-semibold">
-            <div>
-              <label htmlFor="paymentJobTitle" className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Job Title</label>
-              <input
-                id="paymentJobTitle"
-                type="text"
-                value={payJobTitle}
-                disabled
-                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-500 cursor-not-allowed"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="paymentAmountInput" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Payment Amount (₹)</label>
-              <input
-                id="paymentAmountInput"
-                type="number"
-                placeholder="e.g. 500"
-                value={paymentAmountInput}
-                onChange={(e) => setPaymentAmountInput(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-primary"
-                required
-                disabled={payLoading}
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsPayModalOpen(false)}
-                className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={payLoading}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl shadow-md flex items-center justify-center cursor-pointer"
-              >
-                {payLoading ? 'Saving...' : 'Confirm Paid'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </Modal>
-
-      {/* DISPUTE RESPONSE MODAL */}
-      <Modal
-        isOpen={isDisputeResponseOpen}
-        onClose={() => {
-          setIsDisputeResponseOpen(false);
-          setDisputeResponseError('');
-        }}
-        title="Submit Dispute Response"
-      >
-        <div className="flex flex-col gap-4 text-left">
-          <p className="text-slate-500 text-xs leading-relaxed font-medium">
-            Explain your side of the dispute regarding this payment. Provide details of the payment to help the admin audit this transaction.
-          </p>
-
-          {disputeResponseError && (
-            <div className="bg-red-50 text-red-700 text-xs font-semibold p-2.5 rounded border border-red-100">
-              {disputeResponseError}
-            </div>
-          )}
-
-          <form onSubmit={submitDisputeResponse} className="flex flex-col gap-4 text-xs font-semibold">
-            <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-500 mb-2">Select Response Option</label>
-              <div className="flex flex-col gap-2 font-medium">
-                {[
-                  'Payment already completed',
-                  'Payment pending',
-                  'Other explanation'
-                ].map((choice) => (
-                  <label key={choice} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="disputeExplanationChoice"
-                      value={choice}
-                      checked={disputeExplanationChoice === choice}
-                      onChange={() => setDisputeExplanationChoice(choice)}
-                      className="text-primary focus:ring-primary h-4 w-4"
-                    />
-                    {choice}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="disputeExplanationComment" className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Detailed Explanation</label>
-              <textarea
-                id="disputeExplanationComment"
-                rows={3}
-                placeholder="Explain the payment timeline, reference numbers, or pending details..."
-                value={disputeExplanationComment}
-                onChange={(e) => setDisputeExplanationComment(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:border-primary font-medium"
-                required
-              />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsDisputeResponseOpen(false)}
-                className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-center hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={disputeResponseLoading}
-                className="flex-1 bg-primary hover:bg-primary-dark text-white font-bold py-2.5 rounded-xl shadow-sm flex items-center justify-center cursor-pointer"
-              >
-                {disputeResponseLoading ? 'Submitting...' : 'Submit Explanation'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </Modal>
-
-      {/* Help & Support Modal */}
+      </Modal>      {/* Help & Support Modal */}
       <Modal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
@@ -2300,7 +1588,7 @@ const EmployerDashboard = () => {
       >
         <div className="flex flex-col gap-4 text-left py-2">
           <p className="text-xs text-slate-500 leading-relaxed">
-            Welcome to Jobink Help & Support. If you need any assistance regarding jobs, profile validation, or payments, feel free to contact us.
+            Welcome to Jobink Help & Support. If you need any assistance regarding jobs or profile validation, feel free to contact us.
           </p>
 
           <div className="space-y-3">
@@ -2341,12 +1629,12 @@ const EmployerDashboard = () => {
                 <p className="text-slate-500 leading-relaxed">Identity verification by our admin team usually takes 2-4 business hours.</p>
               </div>
               <div className="pt-2.5">
-                <strong className="text-slate-755 block mb-1">How are payments processed?</strong>
-                <p className="text-slate-500 leading-relaxed">Payments are made directly from employers to workers via UPI once the job is marked as completed.</p>
+                <strong className="text-slate-755 block mb-1">How does job completion work?</strong>
+                <p className="text-slate-500 leading-relaxed">Once the worker completes the task, they mark the job as completed. The employer then confirms completion on their dashboard to successfully close the job.</p>
               </div>
               <div className="pt-2.5">
-                <strong className="text-slate-755 block mb-1">What happens if a dispute occurs?</strong>
-                <p className="text-slate-500 leading-relaxed">If there is an issue with payment or completion, you can raise a dispute directly from your dashboard to invoke admin review.</p>
+                <strong className="text-slate-755 block mb-1">How does the scheduler work?</strong>
+                <p className="text-slate-500 leading-relaxed">Employers set date and time slots when posting a job. Workers can accept multiple jobs on the same day as long as their time slots do not overlap.</p>
               </div>
             </div>
           </div>

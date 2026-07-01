@@ -12,6 +12,17 @@ const EmployerDashboard = lazy(() => import('../pages/EmployerDashboard'));
 const PostJobPage = lazy(() => import('../pages/PostJobPage'));
 const AdminDashboard = lazy(() => import('../pages/AdminDashboard'));
 
+// Profile redesign pages
+const HelpPage = lazy(() => import('../pages/HelpPage'));
+const TermsPage = lazy(() => import('../pages/TermsPage'));
+const SavedLocationsPage = lazy(() => import('../pages/profile/SavedLocationsPage'));
+const SkillsPage = lazy(() => import('../pages/profile/SkillsPage'));
+const LanguagePage = lazy(() => import('../pages/profile/LanguagePage'));
+const QueryAdminPage = lazy(() => import('../pages/profile/QueryAdminPage'));
+const SecurityPage = lazy(() => import('../pages/profile/SecurityPage'));
+const CompanyDetailsPage = lazy(() => import('../pages/profile/CompanyDetailsPage'));
+const SchedulePage = lazy(() => import('../pages/SchedulePage'));
+
 // Page loader fallback
 const PageLoader = () => (
   <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
@@ -124,7 +135,7 @@ const AppRoutes = () => {
             ) : !loading && currentUser ? (
               <Navigate to="/dashboard" replace />
             ) : (
-              <LandingPage />
+              <Navigate to="/login" replace />
             )
           } 
         />
@@ -178,6 +189,70 @@ const AppRoutes = () => {
             <AdminRoute>
               <AdminDashboard />
             </AdminRoute>
+          } 
+        />
+
+        {/* Public static support info */}
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+
+        {/* Schedule/Calendar page for workers */}
+        <Route 
+          path="/schedule" 
+          element={
+            <PrivateRoute>
+              <SchedulePage />
+            </PrivateRoute>
+          } 
+        />
+
+        {/* Worker/Employer Profile Subpages */}
+        <Route 
+          path="/profile/locations" 
+          element={
+            <PrivateRoute>
+              <SavedLocationsPage />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/profile/skills" 
+          element={
+            <PrivateRoute>
+              {currentUser?.role === 'worker' ? <SkillsPage /> : <Navigate to="/dashboard" replace />}
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/profile/language" 
+          element={
+            <PrivateRoute>
+              <LanguagePage />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/profile/query-admin" 
+          element={
+            <PrivateRoute>
+              <QueryAdminPage />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/profile/security" 
+          element={
+            <PrivateRoute>
+              <SecurityPage />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/profile/company-details" 
+          element={
+            <PrivateRoute>
+              {currentUser?.role === 'employer' ? <CompanyDetailsPage /> : <Navigate to="/dashboard" replace />}
+            </PrivateRoute>
           } 
         />
         
