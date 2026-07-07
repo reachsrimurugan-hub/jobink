@@ -236,18 +236,19 @@ const WorkerDashboard = () => {
  }
  }, [currentUser]);
 
- const loadRequests = useCallback(async () => {
- try {
- const phoneReq = await authService.getPhoneChangeRequestForUser(currentUser.uid);
- setPhoneRequest(phoneReq);
- const nameReq = await authService.getNameChangeRequestForUser(currentUser.uid);
- setNameRequest(nameReq);
- const upiReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
- setUpiRequest(upiReq);
- } catch (err) {
- console.error("Failed to load requests:", err);
- }
- }, [currentUser]);
+  const loadRequests = useCallback(async () => {
+  if (!currentUser?.uid) return;
+  try {
+  const phoneReq = await authService.getPhoneChangeRequestForUser(currentUser.uid);
+  setPhoneRequest(phoneReq);
+  const nameReq = await authService.getNameChangeRequestForUser(currentUser.uid);
+  setNameRequest(nameReq);
+  const upiReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
+  setUpiRequest(upiReq);
+  } catch (err) {
+  console.error("Failed to load requests:", err);
+  }
+  }, [currentUser]);
 
  const handleFileChange = (e, setFileState) => {
  const file = e.target.files[0];
@@ -514,27 +515,29 @@ const WorkerDashboard = () => {
  if (node) observer.current.observe(node);
  }, [loading, jobs.length, jobsLimit]);
 
- // Load jobs based on filters
- const loadJobs = useCallback(async () => {
- try {
- setLoading(true);
- const data = await jobService.getJobs(null, null, jobsLimit);
- setJobs(data);
- setLoading(false);
- } catch (err) {
- console.error(err);
- setLoading(false);
- }
- }, [jobsLimit]);
+  // Load jobs based on filters
+  const loadJobs = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      const data = await jobService.getJobs(null, null, jobsLimit);
+      setJobs(data);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  }, [jobsLimit, currentUser]);
 
- const loadApplications = useCallback(async () => {
- try {
- const data = await applicationService.getWorkerApplications(currentUser.uid);
- setMyApplications(data);
- } catch (err) {
- console.error(err);
- }
- }, [currentUser]);
+  const loadApplications = useCallback(async () => {
+  if (!currentUser?.uid) return;
+  try {
+  const data = await applicationService.getWorkerApplications(currentUser.uid);
+  setMyApplications(data);
+  } catch (err) {
+  console.error(err);
+  }
+  }, [currentUser]);
 
 
 
@@ -551,20 +554,118 @@ const WorkerDashboard = () => {
  };
  }, [currentUser]);
 
- // Load initial data and reload on tab switches
- useEffect(() => {
- const timer = setTimeout(() => {
- if (activeTab ==='home') {
- loadJobs();
- } else if (activeTab ==='applications') {
- loadApplications();
- } else if (activeTab ==='profile') {
- reloadProfile();
- loadRequests();
- }
- }, 0);
- return () => clearTimeout(timer);
- }, [activeTab, loadJobs, loadApplications, reloadProfile, loadRequests]);
+  // Load initial data and reload on tab switches
+  useEffect(() => {
+    if (!currentUser) return;
+    const timer = setTimeout(() => {
+      if (activeTab ==='home') {
+        loadJobs();
+      } else if (activeTab ==='applications') {
+        loadApplications();
+      } else if (activeTab ==='profile') {
+        reloadProfile();
+        loadRequests();
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [activeTab, loadJobs, loadApplications, reloadProfile, loadRequests, currentUser]);
+
+  const filteredAndSortedJobs = useMemo(() => {
+    let result = [...jobs];
+
+    // 1. Text Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(job => 
+        (job.title && job.title.toLowerCase().includes(q)) ||
+        (job.description && job.description.toLowerCase().includes(q)) ||
+        (job.location && job.location.toLowerCase().includes(q))
+      );
+    }
+
+    // 3. Distance Filter
+    if (workerCoords) {
+      // Calculate distance for all jobs first so we can filter and sort
+      result = result.map(job => {
+        const dist = (job.latitude !== undefined && job.longitude !== undefined)
+          ? getDistance(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+          : null;
+        return { ...job, _distance: dist };
+      });
+
+      if (filterMaxDistance !=='all') {
+        const maxDist = filterMaxDistance ==='custom' 
+          ? customDistanceRadius 
+          : parseFloat(filterMaxDistance);
+        
+        result = result.filter(job => job._distance !== null && job._distance <= maxDist);
+      }
+    }
+
+    // 4. Sorting
+    result.sort((a, b) => {
+      if (sortBy ==='distance' && workerCoords) {
+        const distA = a._distance !== undefined && a._distance !== null ? a._distance : 999999;
+        const distB = b._distance !== undefined && b._distance !== null ? b._distance : 999999;
+        return distA - distB;
+      }
+      
+      if (sortBy ==='pay') {
+        const payA = a.payment || 0;
+        const payB = b.payment || 0;
+        return payB - payA;
+      }
+
+      if (sortBy ==='urgent') {
+        const badgeA = getJobUrgentBadge(a) ? 1 : 0;
+        const badgeB = getJobUrgentBadge(b) ? 1 : 0;
+        if (badgeA !== badgeB) {
+          return badgeB - badgeA;
+        }
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA;
+      }
+
+      // Default:'recent'
+      const dateA = new Date(a.createdAt || 0);
+      const dateB = new Date(b.createdAt || 0);
+      return dateB - dateA;
+    });
+
+    return result;
+  }, [jobs, searchQuery, workerCoords, filterMaxDistance, customDistanceRadius, sortBy]);
+
+  const filteredApplications = useMemo(() => {
+    let result = [...myApplications];
+
+    // 1. Text Search Query
+    if (appSearchQuery.trim()) {
+      const q = appSearchQuery.toLowerCase();
+      result = result.filter(app => 
+        (app.jobTitle && app.jobTitle.toLowerCase().includes(q)) ||
+        (app.employerName && app.employerName.toLowerCase().includes(q)) ||
+        (app.jobLocation && app.jobLocation.toLowerCase().includes(q))
+      );
+    }
+
+    // 2. Status Filter
+    if (appStatusFilter !=='all') {
+      if (appStatusFilter ==='pending') {
+        result = result.filter(app => app.status ==='pending');
+      } else if (appStatusFilter ==='booked') {
+        result = result.filter(app => app.status ==='selected' && app.jobStatus?.toLowerCase() !=='completed');
+      } else if (appStatusFilter ==='completed') {
+        result = result.filter(app => app.status ==='selected' && app.jobStatus?.toLowerCase() ==='completed');
+      }
+    }
+
+    return result;
+  }, [myApplications, appSearchQuery, appStatusFilter]);
+
+  if (!currentUser) {
+    return null;
+  }
 
  // Handle availability toggle
  const handleAvailabilityToggle = async () => {
@@ -609,100 +710,7 @@ const WorkerDashboard = () => {
  }
  };
 
- const filteredAndSortedJobs = useMemo(() => {
- let result = [...jobs];
-
- // 1. Text Search Query
- if (searchQuery.trim()) {
- const q = searchQuery.toLowerCase();
- result = result.filter(job => 
- (job.title && job.title.toLowerCase().includes(q)) ||
- (job.description && job.description.toLowerCase().includes(q)) ||
- (job.location && job.location.toLowerCase().includes(q))
- );
- }
-
-
-
- // 3. Distance Filter
- if (workerCoords) {
- // Calculate distance for all jobs first so we can filter and sort
- result = result.map(job => {
- const dist = (job.latitude !== undefined && job.longitude !== undefined)
- ? getDistance(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
- : null;
- return { ...job, _distance: dist };
- });
-
- if (filterMaxDistance !=='all') {
- const maxDist = filterMaxDistance ==='custom' 
- ? customDistanceRadius 
- : parseFloat(filterMaxDistance);
  
- result = result.filter(job => job._distance !== null && job._distance <= maxDist);
- }
- }
-
- // 4. Sorting
- result.sort((a, b) => {
- if (sortBy ==='distance' && workerCoords) {
- const distA = a._distance !== undefined && a._distance !== null ? a._distance : 999999;
- const distB = b._distance !== undefined && b._distance !== null ? b._distance : 999999;
- return distA - distB;
- }
- 
- if (sortBy ==='pay') {
- const payA = a.payment || 0;
- const payB = b.payment || 0;
- return payB - payA;
- }
-
- if (sortBy ==='urgent') {
- const badgeA = getJobUrgentBadge(a) ? 1 : 0;
- const badgeB = getJobUrgentBadge(b) ? 1 : 0;
- if (badgeA !== badgeB) {
- return badgeB - badgeA;
- }
- const dateA = new Date(a.createdAt || 0);
- const dateB = new Date(b.createdAt || 0);
- return dateB - dateA;
- }
-
- // Default:'recent'
- const dateA = new Date(a.createdAt || 0);
- const dateB = new Date(b.createdAt || 0);
- return dateB - dateA;
- });
-
- return result;
- }, [jobs, searchQuery, workerCoords, filterMaxDistance, customDistanceRadius, sortBy]);
-
- const filteredApplications = useMemo(() => {
- let result = [...myApplications];
-
- // 1. Text Search Query
- if (appSearchQuery.trim()) {
- const q = appSearchQuery.toLowerCase();
- result = result.filter(app => 
- (app.jobTitle && app.jobTitle.toLowerCase().includes(q)) ||
- (app.employerName && app.employerName.toLowerCase().includes(q)) ||
- (app.jobLocation && app.jobLocation.toLowerCase().includes(q))
- );
- }
-
- // 2. Status Filter
- if (appStatusFilter !=='all') {
- if (appStatusFilter ==='pending') {
- result = result.filter(app => app.status ==='pending');
- } else if (appStatusFilter ==='booked') {
- result = result.filter(app => app.status ==='selected' && app.jobStatus?.toLowerCase() !=='completed');
- } else if (appStatusFilter ==='completed') {
- result = result.filter(app => app.status ==='selected' && app.jobStatus?.toLowerCase() ==='completed');
- }
- }
-
- return result;
- }, [myApplications, appSearchQuery, appStatusFilter]);
 
  // Notification Mark Read
  const handleMarkNotifRead = async (id) => {
@@ -722,8 +730,8 @@ const WorkerDashboard = () => {
  }
  };
 
- return (
- <div className="min-h-screen bg-slate-50 pb-20 md:pb-6 flex flex-col justify-between">
+  return (
+  <div className="min-h-screen bg-slate-50 pb-20 md:pb-6 flex flex-col justify-between">
  <div>
  <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
  

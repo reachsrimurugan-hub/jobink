@@ -18,6 +18,10 @@ const QueryAdminPage = () => {
  const [successMsg, setSuccessMsg] = useState('');
  const [errorMsg, setErrorMsg] = useState('');
 
+  if (!currentUser) {
+    return null;
+  }
+
  const handleFileChange = (e) => {
  const file = e.target.files[0];
  if (!file) return;

@@ -13,8 +13,8 @@ const PostJobPage = () => {
  const { t } = useTranslation();
  const [title, setTitle] = useState('');
  const [description, setDescription] = useState('');
- const payment = 0;
- const paymentType ='fixed';
+ const [payment, setPayment] = useState('');
+ const [paymentType, setPaymentType] = useState('fixed');
  // Geolocation and Geoapify States
  const [latitude, setLatitude] = useState(null);
  const [longitude, setLongitude] = useState(null);
@@ -96,6 +96,10 @@ const PostJobPage = () => {
  const [loading, setLoading] = useState(false);
  const navigate = useNavigate();
 
+ if (!currentUser) {
+    return null;
+  }
+
  const handleSubmit = async (e) => {
  e.preventDefault();
  setError('');
@@ -117,6 +121,10 @@ const PostJobPage = () => {
  setError("End Time must be after the Start Time.");
  return;
  }
+ if (Number(payment) <= 0) {
+  setError(t('paymentPositiveAmount'));
+  return;
+  }
  if (!formattedAddress) {
  setError('Please select or enable a verified job location.');
  return;
@@ -406,6 +414,42 @@ const PostJobPage = () => {
  />
  </div>
  </div>
+
+  {/* Payment details: Amount & Type */}
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <label htmlFor="jobPayment" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+        {t('paymentInr')}
+      </label>
+      <input
+        id="jobPayment"
+        type="number"
+        placeholder={t('payAmtPlaceholder') || 'e.g. 500'}
+        value={payment}
+        onChange={(e) => setPayment(e.target.value)}
+        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-bold text-slate-800 touch-target"
+        required
+        min={1}
+        disabled={loading}
+      />
+    </div>
+
+    <div>
+      <label htmlFor="jobPaymentType" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
+        {t('paymentType') || 'Payment Type'}
+      </label>
+      <select
+        id="jobPaymentType"
+        value={paymentType}
+        onChange={(e) => setPaymentType(e.target.value)}
+        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-bold text-slate-850 touch-target"
+        disabled={loading}
+      >
+        <option value="fixed">{t('fixedOneTime') || 'Fixed (One-Time)'}</option>
+        <option value="hourly">{t('perDay') || 'Per Day'}</option>
+      </select>
+    </div>
+  </div>
 
  {/* Submit Button */}
  <button

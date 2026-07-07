@@ -13,6 +13,10 @@ const LanguagePage = () => {
  const currentLang = i18n.language ? i18n.language.split('-')[0] :'en';
  const [successMsg, setSuccessMsg] = useState('');
 
+ if (!currentUser) {
+   return null;
+ }
+
  const languages = [
  { code:'en', label:'English', nativeLabel:'English' },
  { code:'ta', label:'Tamil', nativeLabel:'தமிழ்' },

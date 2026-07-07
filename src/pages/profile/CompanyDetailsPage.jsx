@@ -52,6 +52,10 @@ const CompanyDetailsPage = () => {
  }
  }, [currentUser, loadRequests]);
 
+ if (!currentUser) {
+   return null;
+ }
+
  // Save Basic Bio & Business Type
  const handleSaveBasicInfo = async (e) => {
  e.preventDefault();

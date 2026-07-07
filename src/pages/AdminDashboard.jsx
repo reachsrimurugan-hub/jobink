@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from'react';
+import React, { useState, useEffect, useCallback } from'react';
 import { useNavigate } from'react-router-dom';
 import { useAuth } from'../contexts/AuthContext';
 import { authService, reportService, queryService, disputeService, jobService } from'../services/db';
@@ -35,7 +35,8 @@ const AdminDashboard = () => {
  }
  };
 
- const loadData = async () => {
+ const loadData = useCallback(async () => {
+ if (!currentUser) return;
  try {
  setLoading(true);
  setError('');
@@ -83,11 +84,15 @@ const AdminDashboard = () => {
  setError('Failed to load queue data.');
  setLoading(false);
  }
- };
+ }, [currentUser]);
 
  useEffect(() => {
  loadData();
- }, []);
+ }, [loadData]);
+
+ if (!currentUser) {
+ return null;
+ }
 
  const handleRemoveUser = async (uid, reportId) => {
  setError('');

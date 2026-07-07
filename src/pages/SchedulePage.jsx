@@ -57,6 +57,10 @@ const SchedulePage = () => {
  return () => clearTimeout(timer);
  }, [loadSchedule]);
 
+ if (!currentUser) {
+ return null;
+ }
+
  const handleMarkCompleted = async (jobId) => {
  setErrorMsg('');
  setSuccessMsg('');

@@ -47,6 +47,10 @@ const SavedLocationsPage = () => {
  return () => clearTimeout(delayDebounceFn);
  }, [searchQuery]);
 
+ if (!currentUser) {
+  return null;
+ }
+
  const handleSelectSuggestion = (loc) => {
  setSelectedLoc(loc);
  setSearchQuery('');

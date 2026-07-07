@@ -23,6 +23,10 @@ const SkillsPage = () => {
  }
  }, [currentUser]);
 
+ if (!currentUser) {
+ return null;
+ }
+
  const handleToggleSkill = (skill) => {
  setErrorMsg('');
  setSuccessMsg('');

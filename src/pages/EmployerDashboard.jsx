@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService, jobService, applicationService, notificationService, reviewService, queryService } from '../services/db';
@@ -202,7 +202,8 @@ const EmployerDashboard = () => {
     };
   }, [showFilterDropdown]);
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
+    if (!currentUser?.uid) return;
     try {
       const phoneReq = await authService.getPhoneChangeRequestForUser(currentUser.uid);
       setPhoneRequest(phoneReq);
@@ -213,7 +214,7 @@ const EmployerDashboard = () => {
     } catch (err) {
       console.error("Failed to load requests:", err);
     }
-  };
+  }, [currentUser]);
 
   const handleFileChange = (e, setFileState) => {
     const file = e.target.files[0];
@@ -539,7 +540,8 @@ const EmployerDashboard = () => {
     }
   };
 
-  const loadEmployerData = async () => {
+  const loadEmployerData = useCallback(async () => {
+    if (!currentUser?.uid) return;
     try {
       setLoading(true);
       await jobService.checkPendingPaymentConfirmationsSim(currentUser.uid, currentUser.role);
@@ -550,16 +552,17 @@ const EmployerDashboard = () => {
       console.error(err);
       setLoading(false);
     }
-  };
+  }, [currentUser]);
 
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
+    if (!currentUser?.uid) return;
     try {
       const data = await reviewService.getUserReviews(currentUser.uid);
       setReviews(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [currentUser]);
 
   // Real-time listener for notifications
   useEffect(() => {
@@ -574,6 +577,7 @@ const EmployerDashboard = () => {
 
   // Load and refresh based on active tabs
   useEffect(() => {
+    if (!currentUser) return;
     if (activeTab === 'home' || activeTab === 'jobs') {
       loadEmployerData();
     } else if (activeTab === 'profile') {
@@ -581,7 +585,11 @@ const EmployerDashboard = () => {
       reloadProfile();
       loadRequests();
     }
-  }, [activeTab]);
+  }, [activeTab, loadEmployerData, loadReviews, reloadProfile, loadRequests, currentUser]);
+
+  if (!currentUser) {
+    return null;
+  }
 
   // Open applicant list modal
   const loadApplicantsList = async (jobId) => {
@@ -778,6 +786,7 @@ const EmployerDashboard = () => {
       
     return matchesSearch && matchesStatus;
   });
+
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:pb-6 flex flex-col justify-between">

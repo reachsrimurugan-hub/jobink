@@ -86,6 +86,10 @@ const SecurityPage = () => {
  return () => clearTimeout(timer);
  }, [loadRequests]);
 
+ if (!currentUser) {
+    return null;
+  }
+
  // Image upload handler
  const handleFileChange = (e, setter) => {
  const file = e.target.files[0];
