@@ -137,10 +137,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   const adminIdentifier = import.meta.env.VITE_ADMIN_IDENTIFIER;
+  const adminIdentifiers = adminIdentifier ? adminIdentifier.split(',').map(s => s.trim().toLowerCase()) : [];
   const isAdmin = currentUser?.role === 'admin' && (
-    currentUser.uid === adminIdentifier ||
-    currentUser.phone === adminIdentifier ||
-    (currentUser.email && currentUser.email === adminIdentifier)
+    (currentUser.uid && adminIdentifiers.includes(currentUser.uid.toLowerCase())) ||
+    (currentUser.phone && adminIdentifiers.includes(currentUser.phone.toLowerCase())) ||
+    (currentUser.email && adminIdentifiers.includes(currentUser.email.toLowerCase()))
   );
 
   const value = {

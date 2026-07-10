@@ -152,14 +152,21 @@ export const authService = {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const isAdminEmail = firebaseUser.email && firebaseUser.email.toLowerCase() === 'reach.srimurugan@gmail.com';
+          const adminIdentifier = import.meta.env.VITE_ADMIN_IDENTIFIER;
+          const adminIdentifiers = adminIdentifier ? adminIdentifier.split(',').map(s => s.trim().toLowerCase()) : [];
+
+          const isUserAdmin = (firebaseUser.email && adminIdentifiers.includes(firebaseUser.email.toLowerCase())) ||
+                              (firebaseUser.phoneNumber && adminIdentifiers.includes(firebaseUser.phoneNumber.toLowerCase())) ||
+                              (firebaseUser.uid && adminIdentifiers.includes(firebaseUser.uid.toLowerCase())) ||
+                              (firebaseUser.email && firebaseUser.email.toLowerCase() === 'reach.srimurugan@gmail.com');
+
           const userRef = doc(db, 'users', firebaseUser.uid);
           let userDoc = await getDoc(userRef);
 
-          if (isAdminEmail) {
+          if (isUserAdmin) {
             const adminData = {
               name: firebaseUser.displayName || 'Srimurugan S',
-              email: firebaseUser.email,
+              email: firebaseUser.email || '',
               role: 'admin',
               verified: true,
               phoneVerified: true,
@@ -183,10 +190,12 @@ export const authService = {
           }
 
           if (userDoc.exists()) {
+            const dbData = userDoc.data();
             callback({ 
               uid: firebaseUser.uid, 
-              email: firebaseUser.email || '', 
-              ...userDoc.data() 
+              ...dbData,
+              email: firebaseUser.email || dbData.email || '',
+              phone: firebaseUser.phoneNumber || dbData.phone || ''
             });
           } else {
             // User authenticated but hasn't completed onboarding fields yet
