@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Phone, CheckCircle, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { CheckCircle, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const LoginPage = () => {
@@ -13,6 +13,22 @@ const LoginPage = () => {
   const [loadingLocal, setLoadingLocal] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    // Push a dummy state to history so there is something to pop
+    window.history.pushState({ isLoginDummy: true }, '', window.location.pathname);
+
+    const handlePopState = () => {
+      // Intercept the back navigation and send the user to the landing page
+      navigate('/', { replace: true });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
 
   const handlePhoneSubmit = async (e) => {
     e.preventDefault();
@@ -57,9 +73,9 @@ const LoginPage = () => {
       
       // Redirect based on whether profile role is set
       if (user && user.role) {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       } else {
-        navigate('/register');
+        navigate('/register', { replace: true });
       }
     } catch (err) {
       console.error(err);
@@ -76,9 +92,9 @@ const LoginPage = () => {
       setLoadingLocal(false);
       
       if (user && user.role) {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       } else {
-        navigate('/register');
+        navigate('/register', { replace: true });
       }
     } catch (err) {
       console.error(err);
@@ -92,7 +108,7 @@ const LoginPage = () => {
       {/* Back button */}
       <button 
         type="button" 
-        onClick={() => navigate('/')} 
+        onClick={() => window.history.back()} 
         className="absolute top-4 left-4 text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm touch-target cursor-pointer"
       >
         <ArrowLeft size={14} />

@@ -152,7 +152,36 @@ export const authService = {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const isAdminEmail = firebaseUser.email && firebaseUser.email.toLowerCase() === 'reach.srimurugan@gmail.com';
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          let userDoc = await getDoc(userRef);
+
+          if (isAdminEmail) {
+            const adminData = {
+              name: firebaseUser.displayName || 'Srimurugan S',
+              email: firebaseUser.email,
+              role: 'admin',
+              verified: true,
+              phoneVerified: true,
+              upiVerified: true,
+              selfieVerified: true,
+              verificationStatus: 'verified',
+              trustScore: 100,
+              updatedAt: new Date().toISOString()
+            };
+            if (!userDoc.exists()) {
+              adminData.createdAt = new Date().toISOString();
+              adminData.phone = firebaseUser.phoneNumber || '';
+              adminData.upiId = 'admin@upi';
+              adminData.profilePhotoUrl = firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+              await setDoc(userRef, adminData);
+              userDoc = await getDoc(userRef);
+            } else if (userDoc.data().role !== 'admin' || !userDoc.data().verified) {
+              await updateDoc(userRef, adminData);
+              userDoc = await getDoc(userRef);
+            }
+          }
+
           if (userDoc.exists()) {
             callback({ 
               uid: firebaseUser.uid, 

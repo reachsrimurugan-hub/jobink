@@ -96,15 +96,18 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const { authService } = await import('../services/db');
-      await authService.logout();
+      // Synchronously clear local user states so redirection happens instantly
       setCurrentUser(null);
       setConfirmationResult(null);
       setPhoneNumberAttempt('');
       localStorage.setItem('jobink_loggedIn', 'false');
       sessionStorage.clear();
+
+      // Perform Firebase auth signout in the background
+      const { authService } = await import('../services/db');
+      await authService.logout();
     } catch (error) {
-      throw error;
+      console.error("Firebase logout error:", error);
     }
   };
 

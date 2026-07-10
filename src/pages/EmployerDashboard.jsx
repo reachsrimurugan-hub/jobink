@@ -544,7 +544,6 @@ const EmployerDashboard = () => {
     if (!currentUser?.uid) return;
     try {
       setLoading(true);
-      await jobService.checkPendingPaymentConfirmationsSim(currentUser.uid, currentUser.role);
       const jobsData = await jobService.getMyJobs(currentUser.uid);
       setMyJobs(jobsData);
       setLoading(false);

@@ -135,7 +135,7 @@ const AppRoutes = () => {
             ) : !loading && currentUser ? (
               <Navigate to="/dashboard" replace />
             ) : (
-              <Navigate to="/login" replace />
+              <LandingPage />
             )
           } 
         />
