@@ -135,12 +135,7 @@ const EmployerDashboard = () => {
   const [nameError, setNameError] = useState('');
   const [nameSuccess, setNameSuccess] = useState('');
 
-  // UPI Change States
-  const [upiRequest, setUpiRequest] = useState(null);
-  const [newUpiId, setNewUpiId] = useState('');
-  const [upiLoading, setUpiLoading] = useState(false);
-  const [upiError, setUpiError] = useState('');
-  const [upiSuccess, setUpiSuccess] = useState('');
+
 
   // Help & Terms Modal states
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -150,7 +145,6 @@ const EmployerDashboard = () => {
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   // Re-verification states
-  const [reUpiId, setReUpiId] = useState('');
   const [reSelfie, setReSelfie] = useState('');
   const [reVerifLoading, setReVerifLoading] = useState(false);
   const [reVerifSuccess, setReVerifSuccess] = useState('');
@@ -183,7 +177,7 @@ const EmployerDashboard = () => {
       setEditDescription(currentUser.description || '');
       setEditPhone(currentUser.phone || '');
       setNewName(currentUser.name || '');
-      setNewUpiId(currentUser.upiId || '');
+
     }
   }, [currentUser]);
 
@@ -209,8 +203,7 @@ const EmployerDashboard = () => {
       setPhoneRequest(phoneReq);
       const nameReq = await authService.getNameChangeRequestForUser(currentUser.uid);
       setNameRequest(nameReq);
-      const upiReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
-      setUpiRequest(upiReq);
+
     } catch (err) {
       console.error("Failed to load requests:", err);
     }
@@ -323,65 +316,11 @@ const EmployerDashboard = () => {
     }
   };
 
-  const handleRequestUpiChange = async (e) => {
-    e.preventDefault();
-    setUpiError('');
-    setUpiSuccess('');
-
-    const upiRegex = /^[\w.-]+@[\w.-]+$/;
-    if (!upiRegex.test(newUpiId.trim())) {
-      setUpiError('Please enter a valid UPI ID (e.g. username@bank).');
-      return;
-    }
-
-    setUpiLoading(true);
-    try {
-      await authService.requestUpiChange(
-        currentUser.uid,
-        currentUser.upiId || '',
-        newUpiId.trim(),
-        '',
-        '',
-        currentUser.name || 'User'
-      );
-      setUpiSuccess('UPI change request submitted successfully to Admin.');
-      await loadRequests();
-      setUpiLoading(false);
-    } catch (err) {
-      console.error(err);
-      setUpiError('Failed to request UPI change.');
-      setUpiLoading(false);
-    }
-  };
-
-  const handleResetUpiRequest = async () => {
-    setUpiLoading(true);
-    try {
-      await authService.deleteUpiChangeRequest(currentUser.uid);
-      setUpiRequest(null);
-      setUpiSuccess('');
-      setUpiError('');
-      setNewUpiId(currentUser.upiId || '');
-      setUpiLoading(false);
-    } catch (err) {
-      console.error(err);
-      setUpiError('Failed to reset request.');
-      setUpiLoading(false);
-    }
-  };
-
   const handleReSubmitVerification = async (e) => {
     e.preventDefault();
     setReVerifError('');
     setReVerifSuccess('');
     
-    // UPI ID simple format check
-    const upiRegex = /^[\w.-]+@[\w.-]+$/;
-    if (!upiRegex.test(reUpiId.trim())) {
-      setReVerifError('Please enter a valid UPI ID (e.g. username@bank).');
-      return;
-    }
-
     if (!reSelfie) {
       setReVerifError('Selfie photo is required.');
       return;
@@ -393,16 +332,12 @@ const EmployerDashboard = () => {
       const compressedSelfie = await compressImage(reSelfie, 800, 800);
 
       await authService.saveUserProfile(currentUser.uid, {
-        upiId: reUpiId.trim(),
-        upiQrUrl: '',
-        upiVerified: false,
         selfieUrl: compressedSelfie,
         selfieVerified: false,
         verificationStatus: 'pending',
         verified: false
       });
       setReVerifSuccess('Trust verification details re-submitted successfully!');
-      setReUpiId('');
       setReSelfie('');
       await reloadProfile();
       setReVerifLoading(false);
@@ -1217,15 +1152,7 @@ const EmployerDashboard = () => {
                       </span>
                     )}
 
-                    {currentUser.upiVerified || currentUser.verified ? (
-                      <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-green-200">
-                        <CheckCircle size={10} className="fill-green-600 text-white" />
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-0.5 rounded border border-red-200">
-                        
-                      </span>
-                    )}
+
                   </div>
                 </div>
               </div>
@@ -1663,7 +1590,7 @@ const EmployerDashboard = () => {
 
           <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">2. Identity & Verification</h5>
           <p>
-            Users must submit true and accurate details (Selfies, Aadhaar details, UPI credentials). Any misrepresentation will result in permanent account suspension and ban.
+            Users must submit true and accurate details (Selfies, profile photos). Any misrepresentation will result in permanent account suspension and ban.
           </p>
 
           <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">3. Job Agreements</h5>
@@ -1673,7 +1600,7 @@ const EmployerDashboard = () => {
 
           <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">4. Payment & Direct Transfer</h5>
           <p>
-            Payments are transacted directly between the Employer and the Worker (Direct UPI transfer). Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
+            Payments are transacted directly between the Employer and the Worker. Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
           </p>
 
           <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">5. Safety & Behavior</h5>

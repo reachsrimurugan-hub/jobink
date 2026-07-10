@@ -40,7 +40,6 @@ const db = getFirestore(app);
 const calculateTrustScore = (user) => {
   let score = 0;
   if (user.phoneVerified || user.phone) score += 20;
-  if (user.upiVerified) score += 20;
   if (user.selfieUrl) score += 20;
   const completed = user.completedJobs || 0;
   score += completed * 2;
@@ -63,15 +62,14 @@ async function runMigration() {
       const user = docSnap.data();
       
       const isPhoneVerified = user.phoneVerified === true || !!user.phone;
-      const isUpiVerified = user.upiVerified === true;
       const isSelfieVerified = user.selfieVerified === true;
 
-      const verified = isPhoneVerified && isUpiVerified && isSelfieVerified;
+      const verified = isPhoneVerified && isSelfieVerified;
       
       let verificationStatus = user.verificationStatus || 'unverified';
       if (verified) {
         verificationStatus = 'verified';
-      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
+      } else if (user.verificationStatus === 'pending' || (!isSelfieVerified && user.selfieUrl)) {
         if (user.verificationStatus !== 'rejected') {
           verificationStatus = 'pending';
         }

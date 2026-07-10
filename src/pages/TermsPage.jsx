@@ -37,7 +37,7 @@ const TermsPage = () => {
             <div>
               <h2 className="font-bold text-slate-800 text-[18px] mb-2 uppercase tracking-wide">2. Identity & Verification</h2>
               <p>
-                Users must submit true and accurate details (Selfies, Aadhaar details, UPI credentials). Any misrepresentation will result in permanent account suspension and ban.
+                Users must submit true and accurate details (Selfies, profile photos). Any misrepresentation will result in permanent account suspension and ban.
               </p>
             </div>
 
@@ -51,7 +51,7 @@ const TermsPage = () => {
             <div>
               <h2 className="font-bold text-slate-800 text-[18px] mb-2 uppercase tracking-wide">4. Payment & Direct Transfer</h2>
               <p>
-                Payments are transacted directly between the Employer and the Worker (Direct UPI transfer). Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
+                Payments are transacted directly between the Employer and the Worker. Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
               </p>
             </div>
 

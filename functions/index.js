@@ -8,7 +8,6 @@ const db = admin.firestore();
 const calculateTrustScore = (user) => {
   let score = 0;
   if (user.phoneVerified === true || !!user.phone) score += 20;
-  if (user.upiVerified === true) score += 20;
   if (user.selfieUrl) score += 20; // Selfie uploaded
   const completed = user.completedJobs || 0;
   score += completed * 2;

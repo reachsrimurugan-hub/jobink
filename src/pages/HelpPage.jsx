@@ -85,7 +85,7 @@ const HelpPage = () => {
                 
                 <div className="pt-4">
                   <strong className="text-slate-700 block mb-1">How are payments processed?</strong>
-                  <p className="text-slate-500 leading-relaxed">Payments are made directly from employers to workers via UPI once the job is marked as completed.</p>
+                  <p className="text-slate-500 leading-relaxed">Payments are made directly from employers to workers once the job is marked as completed.</p>
                 </div>
                 
                 <div className="pt-4">

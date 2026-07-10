@@ -23,19 +23,11 @@ const CompanyDetailsPage = () => {
  const [nameError, setNameError] = useState('');
  const [nameSuccess, setNameSuccess] = useState('');
 
- const [upiRequest, setUpiRequest] = useState(null);
- const [newUpiId, setNewUpiId] = useState('');
- const [upiLoading, setUpiLoading] = useState(false);
- const [upiError, setUpiError] = useState('');
- const [upiSuccess, setUpiSuccess] = useState('');
-
  const loadRequests = useCallback(async () => {
  if (!currentUser) return;
  try {
  const nReq = await authService.getNameChangeRequestForUser(currentUser.uid);
  setNameRequest(nReq);
- const uReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
- setUpiRequest(uReq);
  } catch (e) {
  console.warn("Failed to load company credential requests", e);
  }
@@ -124,55 +116,6 @@ const CompanyDetailsPage = () => {
  setNameError('Failed to reset request.');
  } finally {
  setNameLoading(false);
- }
- };
-
- // UPI Credentials Request
- const handleRequestUpiChange = async (e) => {
- e.preventDefault();
- setUpiError('');
- setUpiSuccess('');
-
- const upiRegex = /^[\w.-]+@[\w.-]+$/;
- if (!upiRegex.test(newUpiId.trim())) {
- setUpiError('Please enter a valid UPI ID (e.g. username@bank).');
- return;
- }
-
- setUpiLoading(true);
- try {
- await authService.requestUpiChange(
- currentUser.uid,
- currentUser.upiId ||'',
- newUpiId.trim(),
-'',
-'',
- currentUser.name ||'User'
- );
- setUpiSuccess('UPI change request submitted successfully to Admin.');
- await loadRequests();
- setNewUpiId('');
- } catch (err) {
- console.error(err);
- setUpiError('Failed to request UPI change.');
- } finally {
- setUpiLoading(false);
- }
- };
-
- const handleResetUpiRequest = async () => {
- setUpiLoading(true);
- try {
- await authService.deleteUpiChangeRequest(currentUser.uid);
- setUpiRequest(null);
- setUpiSuccess('');
- setUpiError('');
- setNewUpiId('');
- } catch (err) {
- console.error(err);
- setUpiError('Failed to reset request.');
- } finally {
- setUpiLoading(false);
  }
  };
 
@@ -371,108 +314,6 @@ const CompanyDetailsPage = () => {
  type="button"
  onClick={handleResetNameRequest}
  disabled={nameLoading}
- className="bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs w-full cursor-pointer"
- >
- Reset / Reapply
- </button>
- </div>
- )}
- </div>
- )}
- </div>
-
- {/* 3. UPI Credentials Request Card */}
- <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm text-left space-y-4">
- <h2 className="font-bold text-slate-800 text-[18px] uppercase tracking-wider mb-2 border-b border-slate-100 pb-2 flex items-center gap-2">
- <CreditCard size={18} className="text-[#6D28D9]" />
- UPI Credentials Request
- </h2>
- {upiError && (
- <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-xl flex items-center gap-1.5">
- <AlertCircle size={14} />
- <span>{upiError}</span>
- </div>
- )}
- {upiSuccess && (
- <div className="bg-green-50 border border-green-200 text-green-700 text-xs font-bold p-3 rounded-xl flex items-center gap-1.5">
- <CheckCircle2 size={14} />
- <span>{upiSuccess}</span>
- </div>
- )}
-
- <div className="text-xs">
- <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Current Verified UPI ID</span>
- <strong className="text-slate-800 text-base font-mono font-bold block mt-0.5">{currentUser?.upiId ||'Not Provided'}</strong>
- </div>
-
- {!upiRequest ? (
- <form onSubmit={handleRequestUpiChange} className="space-y-3.5">
- <p className="text-slate-500 text-xs leading-relaxed">
- Request verification of updated payment credentials for workers direct transfers.
- </p>
- <div className="flex gap-2">
- <input
- type="text"
- placeholder="Enter new UPI ID (e.g. user@bank)"
- value={newUpiId}
- onChange={(e) => setNewUpiId(e.target.value)}
- disabled={upiLoading}
- className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-mono font-semibold text-slate-800 bg-slate-50 focus:bg-white focus:border-[#6D28D9] focus:outline-none"
- required
- />
- <button
- type="submit"
- disabled={upiLoading}
- className="bg-[#6D28D9] text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm cursor-pointer shrink-0"
- >
- {upiLoading ?'Requesting...' :'Request'}
- </button>
- </div>
- </form>
- ) : (
- <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
- <div className="flex items-center gap-2">
- <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
- upiRequest.status ==='pending'
- ?'bg-amber-50 text-amber-700 border-amber-200'
- : upiRequest.status ==='approved'
- ?'bg-green-50 text-green-700 border-green-200'
- :'bg-red-50 text-red-700 border-red-200'
- }`}>
- {upiRequest.status}
- </span>
- <span className="text-xs text-slate-555 font-bold">UPI Credentials Request</span>
- </div>
-
- <div className="text-xs text-slate-600">
- Requested UPI ID: <strong className="text-slate-800 font-mono">{upiRequest.newUpiId}</strong>
- </div>
-
- {upiRequest.status ==='pending' && (
- <div className="flex flex-col gap-2">
- <p className="text-[10px] text-slate-400 italic">
- Awaiting verification.
- </p>
- <button
- type="button"
- onClick={handleResetUpiRequest}
- disabled={upiLoading}
- className="bg-white border border-slate-200 text-slate-700 font-bold py-1.5 px-3 rounded-lg text-[10px] cursor-pointer w-full text-center"
- >
- Cancel Request
- </button>
- </div>
- )}
-
- {upiRequest.status ==='rejected' && (
- <div className="space-y-2">
- <p className="text-xs text-red-800 bg-red-100/50 p-2.5 rounded border border-red-200 font-semibold">
- Reason: {upiRequest.rejectionReason ||'No reason provided.'}
- </p>
- <button
- type="button"
- onClick={handleResetUpiRequest}
- disabled={upiLoading}
  className="bg-slate-200 text-slate-700 font-bold py-2 rounded-xl text-xs w-full cursor-pointer"
  >
  Reset / Reapply

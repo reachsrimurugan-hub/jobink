@@ -3,7 +3,7 @@
   "start_url": "/?source=pwa",
   "name": "JobInk - Hyperlocal Jobs Platform",
   "short_name": "JobInk",
-  "description": "Hyperlocal part-time job marketplace connecting local employers and workers instantly. Easy UPI payments and Aadhaar verified badges.",
+  "description": "Hyperlocal part-time job marketplace connecting local employers and workers instantly. Easy direct payments and identity verified badges.",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#8f3bf6",

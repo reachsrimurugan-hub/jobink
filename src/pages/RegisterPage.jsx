@@ -72,8 +72,7 @@ const RegisterPage = () => {
  const [skills, setSkills] = useState([]); // For workers
  const availability = true; // For workers
 
- // Selfie and UPI Verification States
- const [upiId, setUpiId] = useState('');
+ // Selfie Verification States
  const [selfie, setSelfie] = useState('');
  const [profilePhoto, setProfilePhoto] = useState(currentUser?.profilePhotoUrl ||'');
  const [onboardingPhone, setOnboardingPhone] = useState('');
@@ -252,13 +251,6 @@ const RegisterPage = () => {
  e.preventDefault();
  setError('');
 
- // UPI ID simple format check
- const upiRegex = /^[\w.-]+@[\w.-]+$/;
- if (!upiRegex.test(upiId.trim())) {
- setError('Please enter a valid UPI ID (e.g. username@bank).');
- return;
- }
-
  if (!selfie) {
  setError('Selfie photo is required for profile verification.');
  return;
@@ -289,9 +281,6 @@ const RegisterPage = () => {
  verificationStatus:'pending', // Trust verification status is pending
  verified: false,
  phoneVerified: currentUser.phone ? true : phoneVerified,
- upiId: upiId.trim(),
- upiQrUrl:'',
- upiVerified: false,
  selfieUrl: compressedSelfie,
  selfieVerified: false,
  trustScore: 20, // Default trust score (20 for verified phone)
@@ -713,26 +702,6 @@ const RegisterPage = () => {
  </div>
  )}
  </div>
- </div>
-
- {/* UPI ID */}
- <div>
- <label htmlFor="upiIdInput" className="block text-xs font-bold text-slate-700 mb-1.5 uppercase">
- UPI ID (For Direct Payments)
- </label>
- <input
- id="upiIdInput"
- type="text"
- placeholder="username@bank"
- value={upiId}
- onChange={(e) => setUpiId(e.target.value)}
- className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-primary text-sm font-semibold text-slate-800 touch-target"
- required
- disabled={loading}
- />
- <p className="text-slate-400 text-[10px] mt-1">
- E.g. user@okaxis, 9876543210@paytm. Verified helpers receive payments direct to this ID.
- </p>
  </div>
 
  {/* Profile Photo File */}

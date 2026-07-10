@@ -132,12 +132,7 @@ const WorkerDashboard = () => {
  const [nameError, setNameError] = useState('');
  const [nameSuccess, setNameSuccess] = useState('');
 
- // UPI Change States
- const [upiRequest, setUpiRequest] = useState(null);
- const [newUpiId, setNewUpiId] = useState('');
- const [upiLoading, setUpiLoading] = useState(false);
- const [upiError, setUpiError] = useState('');
- const [upiSuccess, setUpiSuccess] = useState('');
+
 
  // Direct Profile Photo Edit State
  const [editPhoto, setEditPhoto] = useState('');
@@ -230,7 +225,6 @@ const WorkerDashboard = () => {
  setEditPhone(currentUser.phone ||'');
  setEditPhoto(currentUser.profilePhotoUrl ||'');
  setNewName(currentUser.name ||'');
- setNewUpiId(currentUser.upiId ||'');
  }, 0);
  return () => clearTimeout(timer);
  }
@@ -243,8 +237,7 @@ const WorkerDashboard = () => {
   setPhoneRequest(phoneReq);
   const nameReq = await authService.getNameChangeRequestForUser(currentUser.uid);
   setNameRequest(nameReq);
-  const upiReq = await authService.getUpiChangeRequestForUser(currentUser.uid);
-  setUpiRequest(upiReq);
+
   } catch (err) {
   console.error("Failed to load requests:", err);
   }
@@ -358,52 +351,7 @@ const WorkerDashboard = () => {
  }
  };
 
- const handleRequestUpiChange = async (e) => {
- e.preventDefault();
- setUpiError('');
- setUpiSuccess('');
 
- const upiRegex = /^[\w.-]+@[\w.-]+$/;
- if (!upiRegex.test(newUpiId.trim())) {
- setUpiError('Please enter a valid UPI ID (e.g. username@bank).');
- return;
- }
-
- setUpiLoading(true);
- try {
- await authService.requestUpiChange(
- currentUser.uid,
- currentUser.upiId ||'',
- newUpiId.trim(),
-'',
-'',
- currentUser.name ||'User'
- );
- setUpiSuccess('UPI change request submitted successfully to Admin.');
- await loadRequests();
- setUpiLoading(false);
- } catch (err) {
- console.error(err);
- setUpiError('Failed to request UPI change.');
- setUpiLoading(false);
- }
- };
-
- const handleResetUpiRequest = async () => {
- setUpiLoading(true);
- try {
- await authService.deleteUpiChangeRequest(currentUser.uid);
- setUpiRequest(null);
- setUpiSuccess('');
- setUpiError('');
- setNewUpiId(currentUser.upiId ||'');
- setUpiLoading(false);
- } catch (err) {
- console.error(err);
- setUpiError('Failed to reset request.');
- setUpiLoading(false);
- }
- };
 
 
 
@@ -1307,7 +1255,7 @@ const WorkerDashboard = () => {
  >
  <div className="flex flex-col gap-4 text-left">
  <p className="text-slate-500 text-xs leading-relaxed font-medium">
- You are raising a payment dispute. The Jobink admin will review the job details, UPI reference, and employer comments to resolve the dispute.
+ You are raising a payment dispute. The Jobink admin will review the job details, transaction reference, and employer comments to resolve the dispute.
  </p>
 
  {disputeError && (
@@ -1436,7 +1384,7 @@ const WorkerDashboard = () => {
  </div>
  <div className="pt-2.5">
  <strong className="text-slate-755 block mb-1">How are payments processed?</strong>
- <p className="text-slate-500 leading-relaxed">Payments are made directly from employers to workers via UPI once the job is marked as completed.</p>
+ <p className="text-slate-500 leading-relaxed"> Payments are made directly from employers to workers once the job is marked as completed.</p>
  </div>
  <div className="pt-2.5">
  <strong className="text-slate-755 block mb-1">What happens if a dispute occurs?</strong>
@@ -1461,7 +1409,7 @@ const WorkerDashboard = () => {
 
  <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">2. Identity & Verification</h5>
  <p>
- Users must submit true and accurate details (Selfies, Aadhaar details, UPI credentials). Any misrepresentation will result in permanent account suspension and ban.
+ Users must submit true and accurate details (Selfies, profile photos). Any misrepresentation will result in permanent account suspension and ban.
  </p>
 
  <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">3. Job Agreements</h5>
@@ -1471,7 +1419,7 @@ const WorkerDashboard = () => {
 
  <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">4. Payment & Direct Transfer</h5>
  <p>
- Payments are transacted directly between the Employer and the Worker (Direct UPI transfer). Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
+ Payments are transacted directly between the Employer and the Worker. Jobink is a facilitator and does not handle payments directly, escrow, or fee deductions.
  </p>
 
  <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] mt-2">5. Safety & Behavior</h5>

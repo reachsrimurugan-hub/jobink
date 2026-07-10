@@ -308,7 +308,7 @@ const SecurityPage = () => {
  Re-Submit Trust Verification Details
  </h3>
  <p className="text-slate-600 text-xs leading-relaxed font-medium">
- Your verification details were rejected. Please update your UPI ID, select a new selfie, and upload.
+  Your verification details were rejected. Please select a new selfie and upload.
  </p>
  {currentUser.rejectionReason && (
  <p className="bg-red-100 text-red-800 text-xs font-semibold p-2.5 rounded-lg border border-red-200">

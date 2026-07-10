@@ -103,7 +103,7 @@ const LandingPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Coins size={16} className="text-emerald-500" />
-                  <span className="text-[11px] font-bold text-slate-600">{t('directUpiPaymentsBadge') || 'Direct UPI Payments'}</span>
+                  <span className="text-[11px] font-bold text-slate-600">{t('directUpiPaymentsBadge') || 'Direct Payments'}</span>
                 </div>
               </div>
             </div>

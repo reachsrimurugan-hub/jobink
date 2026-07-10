@@ -10,7 +10,6 @@ const AdminDashboard = () => {
  const [pendingUsers, setPendingUsers] = useState([]);
  const [pendingPhoneChanges, setPendingPhoneChanges] = useState([]);
  const [pendingNameChanges, setPendingNameChanges] = useState([]);
- const [pendingUpiChanges, setPendingUpiChanges] = useState([]);
  const [pendingReports, setPendingReports] = useState([]);
  const [queries, setQueries] = useState([]);
  const [pendingDisputes, setPendingDisputes] = useState([]);
@@ -49,9 +48,6 @@ const AdminDashboard = () => {
 
  const nameChanges = await authService.getPendingNameChanges();
  setPendingNameChanges(nameChanges);
-
- const upiChanges = await authService.getPendingUpiChanges();
- setPendingUpiChanges(upiChanges);
 
  const reports = await reportService.getPendingReports();
  setPendingReports(reports);
@@ -218,31 +214,6 @@ const AdminDashboard = () => {
  }
  };
 
- const handleVerifyUpi = async (uid, isApproved) => {
- let reason ='';
- if (!isApproved) {
- reason = window.prompt("Enter rejection reason for the UPI details:");
- if (reason === null) return;
- if (!reason.trim()) {
- alert("Rejection reason is required.");
- return;
- }
- }
- setError('');
- setSuccess('');
- try {
- setLoading(true);
- await authService.verifyUpi(uid, isApproved, reason.trim());
- setSuccess(`UPI verification ${isApproved ?'approved' :'rejected'}!`);
- await loadData();
- setLoading(false);
- } catch (err) {
- console.error(err);
- setError('UPI verification update failed.');
- setLoading(false);
- }
- };
-
  const handleRunMigration = async () => {
  setError('');
  setSuccess('');
@@ -334,44 +305,6 @@ const AdminDashboard = () => {
  } catch (err) {
  console.error(err);
  setError('Failed to reject name change request.');
- setLoading(false);
- }
- };
-
- const handleUpiApprove = async (requestId) => {
- setError('');
- setSuccess('');
- try {
- setLoading(true);
- await authService.updateUpiChangeStatus(requestId,'approved');
- setSuccess('UPI details change request approved successfully!');
- await loadData();
- setLoading(false);
- } catch (err) {
- console.error(err);
- setError('Failed to approve UPI change request.');
- setLoading(false);
- }
- };
-
- const handleUpiReject = async (requestId) => {
- const reason = window.prompt("Enter rejection reason for UPI details change:");
- if (reason === null) return;
- if (!reason.trim()) {
- alert("Rejection reason is required.");
- return;
- }
- setError('');
- setSuccess('');
- try {
- setLoading(true);
- await authService.updateUpiChangeStatus(requestId,'rejected', reason.trim());
- setSuccess('UPI change request rejected.');
- await loadData();
- setLoading(false);
- } catch (err) {
- console.error(err);
- setError('Failed to reject UPI change request.');
  setLoading(false);
  }
  };
@@ -468,17 +401,6 @@ const AdminDashboard = () => {
  </button>
  <button
  type="button"
- onClick={() => setActiveSubTab('upiChanges')}
- className={`pb-3 text-sm font-bold border-b-2 ${
- activeSubTab ==='upiChanges'
- ?'border-primary text-primary'
- :'border-transparent text-slate-500'
- }`}
- >
- 💳 UPI ({pendingUpiChanges.length})
- </button>
- <button
- type="button"
  onClick={() => setActiveSubTab('reports')}
  className={`pb-3 text-sm font-bold border-b-2 ${
  activeSubTab ==='reports'
@@ -567,17 +489,13 @@ const AdminDashboard = () => {
  <span>{user.location}</span>
  </div>
  <div className="flex items-center gap-2">
- <FileText size={14} className="text-slate-400" />
- <span>UPI ID: <strong className="text-slate-700 font-mono tracking-wide">{user.upiId ||'Not Provided'}</strong></span>
- </div>
- <div className="flex items-center gap-2">
  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trust Score:</span>
  <strong className="text-slate-700">{user.trustScore ?? 0}/100</strong>
  </div>
  </div>
  </div>
 
- {/* Middle Column: Selfie and UPI QR Previews with individual actions */}
+ {/* Middle Column: Selfie Previews with individual actions */}
  <div className="flex gap-6 border-t border-slate-100 pt-4 md:border-t-0 md:pt-0 items-start flex-wrap">
  {/* Selfie Section */}
  <div className="flex flex-col gap-2 text-center items-center">
@@ -613,38 +531,6 @@ const AdminDashboard = () => {
  onClick={() => handleVerifySelfie(user.uid, true)}
  disabled={loading}
  className="bg-green-50 text-green-700 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
- >
- Approve
- </button>
- </div>
- </div>
- </div>
-
- {/* UPI Verification Section */}
- <div className="flex flex-col gap-2 text-center items-center justify-between h-full">
- <span className="text-[9px] font-bold text-slate-400 uppercase">UPI Credentials</span>
- <div className="flex flex-col gap-1 mt-1">
- <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border ${
- user.upiVerified 
- ?'bg-green-50 text-green-700 border-green-200' 
- :'bg-amber-50 text-amber-700 border-amber-200'
- }`}>
- {user.upiVerified ?'UPI Verified' :'UPI Pending'}
- </span>
- <div className="flex gap-1 mt-1">
- <button
- type="button"
- onClick={() => handleVerifyUpi(user.uid, false)}
- disabled={loading}
- className="bg-red-50 text-red-655 px-2 py-1 rounded text-[10px] font-bold border border-red-100 cursor-pointer"
- >
- Reject
- </button>
- <button
- type="button"
- onClick={() => handleVerifyUpi(user.uid, true)}
- disabled={loading}
- className="bg-green-50 text-green-655 px-2 py-1 rounded text-[10px] font-bold border border-green-100 cursor-pointer"
  >
  Approve
  </button>
@@ -935,12 +821,12 @@ const AdminDashboard = () => {
  </div>
  </div>
 
- {/* Payment UPI Details */}
+ {/* Payment Details */}
  <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-xs space-y-2">
  <h5 className="font-bold text-slate-700 uppercase text-[10px] tracking-wide">Payment Details (Entered by Employer)</h5>
  <div className="grid grid-cols-2 gap-2 leading-relaxed text-slate-600">
  <div>Amount Transferred: <strong className="text-slate-800 font-bold">₹{disp.job?.paymentAmount ||'N/A'}</strong></div>
- <div>Payment Type: <strong className="text-slate-800 font-bold">Direct UPI</strong></div>
+ <div>Payment Type: <strong className="text-slate-800 font-bold">Direct Payment</strong></div>
  <div className="col-span-2">Paid Timestamp: <span className="font-semibold">{disp.job?.paidAt ? new Date(disp.job.paidAt).toLocaleString('en-IN') :'N/A'}</span></div>
  </div>
  </div>
@@ -1052,77 +938,6 @@ const AdminDashboard = () => {
  <button
  type="button"
  onClick={() => handleNameApprove(req.id)}
- disabled={loading}
- className="flex-1 md:flex-none bg-green-600 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
- >
- <CheckCircle size={15} />
- Approve
- </button>
- </div>
- </div>
- ))}
- </div>
- </div>
- )}
- </div>
- )}
-
- {/* Tab 7: UPI Change Requests Queue */}
- {activeSubTab ==='upiChanges' && (
- <div>
- {loading && pendingUpiChanges.length === 0 ? (
- <div className="py-12 flex justify-center items-center">
- <div className="spinner"></div>
- </div>
- ) : pendingUpiChanges.length === 0 ? (
- <div className="bg-white border border-slate-200 p-10 rounded-xl text-center flex flex-col items-center gap-3">
- <CheckCircle className="text-green-500" size={36} />
- <p className="text-sm font-bold text-slate-700">UPI Queue is Empty!</p>
- <p className="text-xs text-slate-400">All UPI update requests have been reviewed.</p>
- </div>
- ) : (
- <div className="flex flex-col gap-5">
- <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
- Pending UPI Change Requests ({pendingUpiChanges.length})
- </h3>
- 
- <div className="flex flex-col gap-4">
- {pendingUpiChanges.map((req) => (
- <div key={req.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col md:flex-row gap-5 justify-between items-start md:items-center">
- <div className="flex-1 space-y-3 text-left">
- <div className="flex items-center gap-2">
- <h4 className="font-extrabold text-slate-800 text-base leading-snug">{req.userName}</h4>
- <span className="text-[10px] text-slate-400 font-semibold">User ID: {req.uid}</span>
- </div>
- <div className="text-xs text-slate-655 flex flex-wrap gap-6 items-center pt-2 border-t border-slate-50">
- <div>
- <span className="text-slate-400 font-bold block uppercase text-[9px] mb-0.5">Current UPI ID</span>
- <span className="font-mono font-bold text-slate-700">{req.oldUpiId ||'N/A'}</span>
- </div>
- <div className="text-slate-355 font-light text-lg">→</div>
- <div>
- <span className="text-primary font-bold block uppercase text-[9px] mb-0.5">Requested New UPI ID</span>
- <span className="font-mono font-bold text-primary">{req.newUpiId}</span>
- </div>
- <div className="ml-auto text-[10px] text-slate-400 self-end">
- Requested: {new Date(req.createdAt).toLocaleDateString('en-IN')}
- </div>
- </div>
- </div>
- 
- <div className="flex gap-2 w-full md:w-auto shrink-0 border-t border-slate-100 pt-3 md:border-t-0 md:pt-0">
- <button
- type="button"
- onClick={() => handleUpiReject(req.id)}
- disabled={loading}
- className="flex-1 md:flex-none bg-red-50 text-red-600 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-red-100 touch-target cursor-pointer"
- >
- <XCircle size={15} />
- Reject
- </button>
- <button
- type="button"
- onClick={() => handleUpiApprove(req.id)}
  disabled={loading}
  className="flex-1 md:flex-none bg-green-600 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm touch-target cursor-pointer"
  >

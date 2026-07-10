@@ -47,7 +47,6 @@ export const clearProfileCache = () => {
 export const calculateTrustScore = (user) => {
   let score = 0;
   if (user.phoneVerified) score += 20;
-  if (user.upiVerified) score += 20;
   if (user.selfieUrl) score += 20; // Selfie uploaded
   const completed = user.completedJobs || 0;
   score += completed * 2;
@@ -64,15 +63,14 @@ export const recalculateUserTrustAndVerification = async (uid) => {
   const user = userSnap.data();
 
   const isPhoneVerified = user.phoneVerified === true || !!user.phone;
-  const isUpiVerified = user.upiVerified === true;
   const isSelfieVerified = user.selfieVerified === true;
 
-  const verified = isPhoneVerified && isUpiVerified && isSelfieVerified;
+  const verified = isPhoneVerified && isSelfieVerified;
   
   let verificationStatus = user.verificationStatus || 'unverified';
   if (verified) {
     verificationStatus = 'verified';
-  } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
+  } else if (user.verificationStatus === 'pending' || (!isSelfieVerified && user.selfieUrl)) {
     if (user.verificationStatus !== 'rejected') {
       verificationStatus = 'pending';
     }
@@ -170,7 +168,6 @@ export const authService = {
               role: 'admin',
               verified: true,
               phoneVerified: true,
-              upiVerified: true,
               selfieVerified: true,
               verificationStatus: 'verified',
               trustScore: 100,
@@ -179,7 +176,6 @@ export const authService = {
             if (!userDoc.exists()) {
               adminData.createdAt = new Date().toISOString();
               adminData.phone = firebaseUser.phoneNumber || '';
-              adminData.upiId = 'admin@upi';
               adminData.profilePhotoUrl = firebaseUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
               await setDoc(userRef, adminData);
               userDoc = await getDoc(userRef);
@@ -358,7 +354,6 @@ export const authService = {
     await updateDoc(userRef, { 
       verificationStatus: status,
       verified: isApproved,
-      upiVerified: isApproved,
       selfieVerified: isApproved,
       rejectionReason: isApproved ? '' : rejectionReason
     });
@@ -413,35 +408,6 @@ export const authService = {
     return true;
   },
 
-  // Verify UPI details specifically
-  verifyUpi: async (uid, isApproved, rejectionReason = '') => {
-    const userRef = doc(db, 'users', uid);
-    await updateDoc(userRef, { 
-      upiVerified: isApproved,
-      verificationStatus: isApproved ? 'pending' : 'rejected',
-      rejectionReason: isApproved ? '' : rejectionReason
-    });
-    
-    const freshUser = await recalculateUserTrustAndVerification(uid);
-    
-    await notificationService.addNotification(
-      uid,
-      isApproved ? "UPI Verification Approved!" : "UPI Verification Failed",
-      isApproved 
-        ? "Your UPI credentials have been approved. Trust Score updated."
-        : `Your UPI verification was rejected by the admin. Reason: ${rejectionReason}`
-    );
-
-    if (freshUser) {
-      await notificationService.addNotification(
-        uid,
-        "Trust Score Updated",
-        `Your Trust Score has been updated to ${freshUser.trustScore}/100.`
-      );
-    }
-    return true;
-  },
-
   // Get all flagged users for admin dashboard
   getFlaggedUsers: async () => {
     const q = query(
@@ -473,15 +439,14 @@ export const authService = {
       const uid = docSnap.id;
 
       const isPhoneVerified = user.phoneVerified === true || !!user.phone;
-      const isUpiVerified = user.upiVerified === true;
       const isSelfieVerified = user.selfieVerified === true;
 
-      const verified = isPhoneVerified && isUpiVerified && isSelfieVerified;
+      const verified = isPhoneVerified && isSelfieVerified;
       
       let verificationStatus = user.verificationStatus || 'unverified';
       if (verified) {
         verificationStatus = 'verified';
-      } else if (user.verificationStatus === 'pending' || (!isUpiVerified && user.upiId) || (!isSelfieVerified && user.selfieUrl)) {
+      } else if (user.verificationStatus === 'pending' || (!isSelfieVerified && user.selfieUrl)) {
         if (user.verificationStatus !== 'rejected') {
           verificationStatus = 'pending';
         }
@@ -660,76 +625,7 @@ export const authService = {
     return true;
   },
 
-  // UPI Change Requests
-  requestUpiChange: async (uid, oldUpiId, newUpiId, oldUpiQr, newUpiQr, userName) => {
-    const requestRef = doc(db, 'upiChangeRequests', uid);
-    const payload = {
-      uid,
-      userName,
-      oldUpiId,
-      newUpiId,
-      oldUpiQr,
-      newUpiQr,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    await setDoc(requestRef, payload);
 
-    await notificationService.addNotification(
-      'admin',
-      'UPI Details Change Request',
-      `${userName} has requested to update their UPI details.`
-    );
-    return payload;
-  },
-
-  getUpiChangeRequestForUser: async (uid) => {
-    const docSnap = await getDoc(doc(db, 'upiChangeRequests', uid));
-    return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
-  },
-
-  getPendingUpiChanges: async () => {
-    const q = query(
-      collection(db, 'upiChangeRequests'),
-      where('status', '==', 'pending')
-    );
-    const querySnapshot = await getDocs(q);
-    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  },
-
-  updateUpiChangeStatus: async (requestId, status, rejectionReason = '') => {
-    const requestRef = doc(db, 'upiChangeRequests', requestId);
-    const requestSnap = await getDoc(requestRef);
-    if (!requestSnap.exists()) return false;
-
-    const requestData = requestSnap.data();
-    await updateDoc(requestRef, { status, rejectionReason });
-
-    if (status === 'approved') {
-      const userRef = doc(db, 'users', requestData.uid);
-      await updateDoc(userRef, {
-        upiId: requestData.newUpiId,
-        upiQrUrl: requestData.newUpiQr
-      });
-    }
-
-    profileCache.delete(requestData.uid);
-
-    await notificationService.addNotification(
-      requestData.uid,
-      status === 'approved' ? 'UPI Change Request Approved' : 'UPI Change Request Rejected',
-      status === 'approved'
-        ? `Your request to change your UPI details was approved.`
-        : `Your request to change your UPI details was rejected. Reason: ${rejectionReason}`
-    );
-    return true;
-  },
-
-  deleteUpiChangeRequest: async (uid) => {
-    await deleteDoc(doc(db, 'upiChangeRequests', uid));
-    return true;
-  },
 
   // Request profile photo change (creates a request document in Firestore)
   requestPhotoChange: async (uid, userName, oldPhoto, newPhoto) => {
